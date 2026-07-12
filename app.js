@@ -54,20 +54,15 @@ function seedMilestones(){
 }
 function seed(){
  S={
-  profile:{currentAge:31,retireAge:56,annualSpending:800000,monthlyContribution:45000,contribStepUp:0.06,targetMonthlyIncome:30000,defaultNetYield:0.07,domesticDivTax:0.10,fxRate:58.5,fxLu:'2026-07-01',withdrawalMultiplier:30,realReturnMode:'auto',realReturnManual:0.06,bucketReturns:{Growth:0.07,Income:0.045,Stability:0.025},includeMP2Income:false},
+  profile:{currentAge:25,retireAge:60,annualSpending:300000,monthlyContribution:20000,contribStepUp:0.05,targetMonthlyIncome:15000,defaultNetYield:0.07,domesticDivTax:0.10,fxRate:61.5,fxLu:'2026-07-01',withdrawalMultiplier:30,realReturnMode:'auto',realReturnManual:0.06,bucketReturns:{Growth:0.07,Income:0.045,Stability:0.025},includeMP2Income:false},
   positions:[
    P('MBT','Metrobank','Income','PHP',500,78,4.0,null,false,30000),
-   P('MREIT','MREIT Inc','Income','PHP',5000,14.1,1.0,null,false,66000),
    P('AREIT','AREIT Inc','Income','PHP',2000,40,2.2,null,false,68000),
-   P('RCR','RL Commercial REIT','Income','PHP',6000,6.5,0.45,null,false,37200),
-   P('MANULIFE-INCOME','Manulife Multi-Asset Income Feeder','Income','PHP',20000,1.05,0.05,null,false,20000),
    P('SPY-UITF','BPI US Feeder (SPY UITF)','Growth','PHP',1000,135,0,null,false,120000),
    P('SPMO','SPMO S&P500 Momentum','Growth','USD',100,110,0,null,false,526500),
    P('SMH','SMH Semiconductors','Growth','USD',20,300,0,null,false,292500),
-   P('VYMI','VYMI Intl High Dividend','Growth','USD',200,70,3.5,0.25,false,760500),
-   P('MANULIFE-ASIA','Manulife Asia Best Select','Growth','PHP',10000,1.2,0,null,false,11000),
-   P('MP2','MP2 Pag-IBIG','Stability','PHP',205000,1,0.065,0,false,205000),
-   P('VUL','VUL Insurance Fund','Insurance','PHP',1,160000,0,null,true,150000)
+   P('MP2','MP2 Pag-IBIG','Stability','PHP',200000,1,0.065,0,false,200000),
+   P('VUL','VUL Insurance Fund','Insurance','PHP',1,110000,0,null,true,100000)
   ],
   snapshots:[{date:'2026-01-31',invested:400000,marketValue:410000},{date:'2026-03-31',invested:440000,marketValue:465000},{date:'2026-05-31',invested:480000,marketValue:505000},{date:'2026-06-30',invested:500000,marketValue:512000}],
   cadence:{currentPrice:7,annualDividendPerUnit:100,fxRate:7},
@@ -299,7 +294,7 @@ function renderProjector(){
  sv('pjAge',p.currentAge);sv('pjRetire',p.retireAge);sv('pjMonthly',p.monthlyContribution);sv('pjStep',(p.contribStepUp*100).toFixed(1));sv('pjReturn',(realReturn()*100).toFixed(2));sv('pjSpend',p.annualSpending);sv('pjPort',Math.round(totals().cv));
 }
 function computeProjector(){
- var age=Number((el('pjAge')||{}).value)||31;var ret=Number((el('pjRetire')||{}).value)||56;var monthly=Number((el('pjMonthly')||{}).value)||0;var step=(Number((el('pjStep')||{}).value)||0)/100;var r=(Number((el('pjReturn')||{}).value)||6)/100;var spend=Number((el('pjSpend')||{}).value)||0;var mult=Number((el('pjMult')||{}).value)||30;var v=Number((el('pjPort')||{}).value)||0;
+ var age=Number((el('pjAge')||{}).value)||25;var ret=Number((el('pjRetire')||{}).value)||60;var monthly=Number((el('pjMonthly')||{}).value)||0;var step=(Number((el('pjStep')||{}).value)||0)/100;var r=(Number((el('pjReturn')||{}).value)||6)/100;var spend=Number((el('pjSpend')||{}).value)||0;var mult=Number((el('pjMult')||{}).value)||30;var v=Number((el('pjPort')||{}).value)||0;
  var FIRE=spend*mult;var target=Math.ceil(FIRE/Math.pow(1+r,ret-age)/500000)*500000;var coastAge=null;var c=monthly*12;
  for(var a=age;a<ret;a++){var grown=v*Math.pow(1+r,ret-a);if(grown>=FIRE&&coastAge===null)coastAge=a;v=v*(1+r)+c;c*=(1+step);}
  if(v>=FIRE&&coastAge===null)coastAge=ret;
