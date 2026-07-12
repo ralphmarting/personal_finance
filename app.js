@@ -59,8 +59,7 @@ function seed(){
    P('MBT','Metrobank','Income','PHP',500,78,4.0,null,false,30000),
    P('AREIT','AREIT Inc','Income','PHP',2000,40,2.2,null,false,68000),
    P('SPY-UITF','BPI US Feeder (SPY UITF)','Growth','PHP',1000,135,0,null,false,120000),
-   P('SPMO','SPMO S&P500 Momentum','Growth','USD',100,110,0,null,false,526500),
-   P('SMH','SMH Semiconductors','Growth','USD',20,300,0,null,false,292500),
+   P('SOXX','Semiconductors ETF','Growth','USD',20,300,0,null,false,292500),
    P('MP2','MP2 Pag-IBIG','Stability','PHP',200000,1,0.065,0,false,200000),
    P('VUL','VUL Insurance Fund','Insurance','PHP',1,110000,0,null,true,100000)
   ],
