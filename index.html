@@ -11,81 +11,96 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-
 <header class="header">
   <div>
     <h1>Portfolio Dashboard</h1>
-    <span>Your family's path to freedom</span>
+    <span>Your path to long-term financial progress</span>
   </div>
   <div style="position:relative">
     <button id="bellBtn">&#128276;<span id="bellBadge" class="badge bad"></span></button>
     <div id="bellPanel" class="card"><h4 style="margin:0 0 8px">Updates due</h4><ul id="bellList" class="notif"></ul></div>
   </div>
 </header>
-
 <nav class="nav">
   <button class="navbtn sel" data-tab="dashboard" onclick="showTab('dashboard')">&#128202; Dashboard</button>
   <button class="navbtn" data-tab="tools" onclick="showTab('tools')">&#129520; Tools</button>
   <button class="navbtn" data-tab="data" onclick="showTab('data')">&#9881;&#65039; Settings</button>
   <button class="navbtn" data-tab="help" onclick="showTab('help')">&#10067; Help</button>
 </nav>
-
 <div class="wrap">
 
 <!-- DASHBOARD -->
 <section id="tab-dashboard" class="tab active">
   <div class="grid cols-3">
-    <div class="hero"><div class="label">COAST FIRE PROGRESS</div><div class="big" id="coastPct">-</div><div class="sub" id="coastSub"></div></div>
-    <div class="hero"><div class="label">TOTAL INVESTED</div><div class="big" id="totalInvested">-</div><div class="sub">Cost basis you put in</div></div>
-    <div class="hero"><div class="label">NET ANNUAL INCOME</div><div class="big" id="netAnnual">-</div><div class="sub">MP2 excluded by default</div></div>
+    <div class="hero">
+      <div class="label">COAST FIRE PROGRESS</div>
+      <div class="big" id="coastPct">-</div>
+      <div class="sub" id="coastSub"></div>
+      <div class="bar hero-bar"><span id="coastHeroBar"></span></div>
+    </div>
+    <div class="hero">
+      <div class="label">TOTAL INVESTED</div>
+      <div class="big" id="totalInvested">-</div>
+      <div class="sub">Cost basis you put in</div>
+    </div>
+    <div class="hero">
+      <div class="label">INCOME COVERAGE</div>
+      <div class="big" id="incomeCoverage">-</div>
+      <div class="sub" id="incomeCoverageSub"></div>
+      <div class="bar hero-bar"><span id="incomeHeroBar"></span></div>
+    </div>
   </div>
 
   <div class="grid cols-3">
     <div class="metric"><div class="label">Current Value</div><div class="val" id="currentValue">-</div></div>
     <div class="metric"><div class="label">Unrealized Gain</div><div class="val" id="gainPct">-</div></div>
-    <div class="metric"><div class="label">Net Monthly Income</div><div class="val" id="netMonthly">-</div></div>
+    <div class="metric"><div class="label">Net Monthly Income</div><div class="val" id="netMonthly">-</div><div class="note">Spendable dividends only</div></div>
   </div>
 
   <div class="card"><b>&#127937; Next Up</b><p id="nextUp" style="margin:8px 0"></p><div class="bar mini"><span id="nextUpBar"></span></div></div>
 
-  <div class="card">
-    <h3>Coast FIRE</h3>
-    <div class="bar"><span id="coastBar"></span></div>
-    <p id="coastReturns" style="margin-top:10px;color:var(--muted)"></p>
-  </div>
-
   <div class="grid cols-2">
-    <div class="card"><h3>Allocation by Bucket</h3><div class="chartwrap"><canvas id="chartBucket"></canvas></div><ul id="legendBucket" class="legend"></ul></div>
-    <div class="card"><h3>Allocation by Holding</h3><div class="chartwrap"><canvas id="chartHolding"></canvas></div><ul id="legendHolding" class="legend"></ul></div>
+    <div class="card">
+      <div class="cardhead">
+        <h3>Allocation by Bucket</h3>
+        <div class="inline-toggle">
+          <span>Exclude illiquid assets</span>
+          <label class="switch"><input type="checkbox" id="illiquidToggle"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="chartwrap"><canvas id="chartBucket"></canvas></div>
+      <ul id="legendBucket" class="legend"></ul>
+      <div style="margin:10px 0"><span id="semiBadge" class="badge"></span></div>
+    </div>
+    <div class="card">
+      <h3>Allocation by Holding</h3>
+      <div class="chartwrap"><canvas id="chartHolding"></canvas></div>
+      <ul id="legendHolding" class="legend"></ul>
+    </div>
   </div>
 
-  <div class="card"><span id="semiBadge" class="badge"></span></div>
-
-  <div class="card"><h3>Where Your Monthly Income Comes From</h3><div class="chartwrap"><canvas id="chartIncome"></canvas></div></div>
+  <div class="card"><h3>Where Your Monthly Income Comes From</h3><div class="chartwrap"><canvas id="chartIncome"></canvas></div><p class="note">MP2 is excluded from income calculations.</p></div>
 
   <div class="card" style="background:linear-gradient(135deg,#0e7d8b,#17a673);color:#fff">
     <h3 style="color:#fff">&#129496; Income Resilience</h3>
     <div style="font-size:2rem;font-weight:800" id="resMonthly">-</div>
-    <p style="opacity:.92;margin:6px 0 0">Your dividend income is largely independent of market price swings. Stay the course.</p>
-    <br />
-    <div><b>Include MP2 (auto-reinvested) in income</b><div style="font-size:.82rem;">Off by default &mdash; MP2 compounds, it isn't spendable cash.</div></div>
-    <label class="switch"><input type="checkbox" id="mp2Toggle"><span class="slider"></span></label>
+    <p style="opacity:.92;margin:6px 0 0">This view focuses on spendable dividends after tax and excludes auto-reinvested products.</p>
   </div>
 
-  <div class="card"><h3>Portfolio Value Over Time</h3><div class="chartwrap"><canvas id="chartValue"></canvas></div><p id="valueEmpty" style="display:none;color:var(--muted)">No snapshots yet &mdash; save one in &#9881;&#65039; Settings.</p></div>
+  <div class="card"><h3>Portfolio Value Over Time</h3><div class="chartwrap"><canvas id="chartValue"></canvas></div><p id="valueEmpty" style="display:none;color:var(--muted)">No snapshots yet — save one in Settings.</p></div>
 
   <div class="quest">
-    <h2>&#127942; Your Journey &mdash; Milestones &amp; Quests</h2>
-    <p class="sub">Why we're doing this. Every peso is a step toward freedom for your family.</p>
+    <h2>&#127942; Milestones &amp; Quests</h2>
+    <p class="sub">Progress markers for contributions, growth, coverage, and long-term consistency.</p>
     <div id="questGrid" class="questgrid"></div>
     <details>
       <summary>&#10133; Add your own quest</summary>
       <div class="grid cols-3" style="margin-top:12px">
         <div class="field"><label>Type</label><select id="mType"><option value="capital">capital</option><option value="gain">gain</option><option value="income">income</option><option value="incomeCover">incomeCover</option><option value="manual">manual</option></select></div>
-        <div class="field"><label>Threshold (&#8369; or ratio)</label><input id="mThreshold"></div>
+        <div class="field"><label>Threshold (₱ or ratio)</label><input id="mThreshold"></div>
         <div class="field"><label>Category</label><input id="mCat" placeholder="e.g. Family"></div>
         <div class="field"><label>Label</label><input id="mLabel"></div>
-        <div class="field"><label>Motivator message</label><input id="mMotivator" placeholder="You did it! &#127881;"></div>
+        <div class="field"><label>Motivator message</label><input id="mMotivator" placeholder="You did it! 🎉"></div>
         <div class="field" style="align-self:end"><button class="btn" onclick="addMilestone()">Add Quest</button></div>
       </div>
     </details>
@@ -95,45 +110,48 @@
 <!-- TOOLS -->
 <section id="tab-tools" class="tab">
   <div class="btnrow">
-    <button class="toolbtn sel" data-tool="alloc" onclick="showTool('alloc')">&#128202; Allocation</button>
-    <button class="toolbtn" data-tool="dividend" onclick="showTool('dividend')">&#128181; Dividend Planner</button>
-    <button class="toolbtn" data-tool="target" onclick="showTool('target')">&#127919; Target Price</button>
+    <button class="toolbtn sel" data-tool="dividend" onclick="showTool('dividend')">&#128181; Dividend Planner</button>
     <button class="toolbtn" data-tool="rebalance" onclick="showTool('rebalance')">&#9878;&#65039; Rebalancer</button>
     <button class="toolbtn" data-tool="projector" onclick="showTool('projector')">&#128200; Coast Projector</button>
   </div>
 
-  <div id="tool-alloc" class="tool active card">
-    <h3>Allocation Calculator</h3>
-    <div class="field"><label>Amount to allocate (&#8369;)</label><input id="allocAmt"></div>
-    <div class="btnrow"><button class="btn alt" onclick="fillAlloc()">Fill from current weights</button><button class="btn" onclick="computeAlloc()">Calculate</button></div>
-    <div id="allocTotal" style="margin:10px 0"></div>
-    <span id="allocSemi" class="badge"></span>
-    <table><thead><tr><th>Holding</th><th>Target %</th><th>Amount</th></tr></thead><tbody id="allocTable"></tbody></table>
-  </div>
-
-  <div id="tool-dividend" class="tool card">
-    <h3>Dividend Income Planner</h3>
-    <div class="field"><label>Target monthly income (&#8369;)</label><input id="divTarget"><button class="btn alt" style="margin-top:6px" onclick="setTargetFromExpense('divTarget')">Calculate from Annual Expense</button></div>
-    <p>Current net monthly income: <b id="divCurrent"></b></p>
-    <p>Annual gap: <b id="divGap"></b></p>
-    <div class="field"><label>Pick a holding</label><select id="divPick"></select></div>
-    <button class="btn" onclick="capitalToAdd()">Capital needed</button>
+  <div id="tool-dividend" class="tool active card">
+    <h3>Dividend Planner</h3>
+    <div class="grid cols-2">
+      <div class="field"><label>Monthly dividend target (₱)</label><input id="divTarget" oninput="renderDividend()"><br><button class="btn alt" style="margin-top:6px" onclick="setTargetFromExpense('divTarget')">Calculate from Annual Expense</button></div>
+      <div class="field"><label>Desired net yield (%)</label><input id="divDesiredYield" value="7" oninput="renderDividend()"></div>
+    </div>
+    <div class="grid cols-2">
+      <div>
+        <p>Current annual income: <b id="divCurrent"></b></p>
+        <p>Coverage of total spending: <b id="divCoverage"></b></p>
+      </div>
+      <div>
+        <p>Annual gap to planner target: <b id="divGap"></b></p>
+        <p>Portfolio yield on cost: <b id="divYoc"></b></p>
+      </div>
+    </div>
     <p id="divResult" style="margin-top:10px"></p>
-    <table><thead><tr><th>Holding</th><th>Price</th><th>Net Yield</th></tr></thead><tbody id="divTable"></tbody></table>
-  </div>
-
-  <div id="tool-target" class="tool card">
-    <h3>Target Price Finder</h3>
-    <div class="field"><label>Desired net yield (%)</label><input id="tgtYield" value="7" oninput="renderTarget()"></div>
-    <table><thead><tr><th>Holding</th><th>Current</th><th>Net Yield now</th><th>Target Price</th><th>Recommendation</th></tr></thead><tbody id="tgtTable"></tbody></table>
+    <table>
+      <thead><tr><th>Holding</th><th>Current Price</th><th>Current Net Monthly</th><th>Net Yield</th><th>Target Price</th><th>Additional Capital</th></tr></thead>
+      <tbody id="divTable"></tbody>
+    </table>
+      <div class="note" style="padding-top:10px">Each row estimates the additional capital needed for that specific holding to reach the planner target on its own.</div>
   </div>
 
   <div id="tool-rebalance" class="tool card">
-    <h3>Rebalancer (Bucket &rarr; Holding)</h3>
-    <div class="field"><label>New money to add (&#8369;)</label><input id="rbAdd" value="0" oninput="computeRebalance()"></div>
+    <h3>Rebalancer (Bucket → Holding)</h3>
+    <div class="btnrow">
+      <button class="btn alt" onclick="loadCurrentDistribution()">Load Current Weights</button>
+      <button class="btn alt" onclick="loadDefaultDistribution()">Load Default Distribution</button>
+    </div>
+    <div class="field"><label>New money to add (₱)</label><input id="rbAdd" value="0" oninput="computeRebalance()"></div>
     <button class="btn" onclick="computeRebalance()">Compute</button>
-    <table><thead><tr><th>Holding</th><th>Now</th><th>Within %</th><th>Target</th><th>Action</th></tr></thead><tbody id="rbTable"></tbody></table>
-    <p class="note">Tip: keep MP2 &le; 20% of portfolio.</p>
+    <table>
+      <thead><tr><th>Holding</th><th>Now</th><th>Within %</th><th>Target</th><th>Action</th></tr></thead>
+      <tbody id="rbTable"></tbody>
+    </table>
+    <p class="note">Default distribution loads only bucket targets. Within-bucket weights are based on current composition.</p>
   </div>
 
   <div id="tool-projector" class="tool card">
@@ -160,21 +178,28 @@
     <div class="grid cols-3">
       <div class="field"><label>Current age</label><input id="pfAge"></div>
       <div class="field"><label>Retire age</label><input id="pfRetire"></div>
-      <div class="field"><label>Annual spending (&#8369;)</label><input id="pfSpend"></div>
-      <div class="field"><label>Monthly contribution (&#8369;)</label><input id="pfMonthly"></div>
+      <div class="field"><label>Annual spending (₱)</label><input id="pfSpend"></div>
+      <div class="field"><label>Monthly contribution (₱)</label><input id="pfMonthly"></div>
       <div class="field"><label>Annual step-up (%)</label><input id="pfStep"></div>
-      <div class="field"><label>Target monthly income (&#8369;)</label><input id="pfTargetIncome"><button class="btn alt" style="margin-top:6px" onclick="setTargetFromExpense('pfTargetIncome')">Calculate from Annual Expense</button></div>
+      <div class="field"><label>Income coverage target (% of spending)</label><input id="pfIncomePct"><button class="btn alt" style="margin-top:6px" onclick="setTargetFromExpense('divTarget')">Preview in Planner</button></div>
       <div class="field"><label>Default net yield (%)</label><input id="pfNetYield"></div>
       <div class="field"><label>Domestic dividend tax (%)</label><input id="pfDivTax"></div>
-      <div class="field"><label>FX rate (USD&rarr;PHP)</label><input id="pfFx"></div>
+      <div class="field"><label>FX rate (USD→PHP)</label><input id="pfFx"></div>
       <div class="field"><label>Withdrawal multiple</label><input id="pfMult"></div>
       <div class="field"><label>Real return mode</label><select id="pfReturnMode"><option value="auto">auto</option><option value="manual">manual</option></select></div>
       <div class="field"><label>Manual real return (%)</label><input id="pfReturnManual"></div>
       <div class="field"><label>Growth bucket return (%)</label><input id="pfRetGrowth"></div>
       <div class="field"><label>Income bucket return (%)</label><input id="pfRetIncome"></div>
       <div class="field"><label>Stability bucket return (%)</label><input id="pfRetStability"></div>
-      <div class="field"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="pfMP2"> Include MP2 in income</label></div>
     </div>
+
+    <h4 class="section-mini">Default Distribution Profile</h4>
+    <div class="grid cols-3">
+      <div class="field"><label>Growth %</label><input id="pfDefGrowth"></div>
+      <div class="field"><label>Income %</label><input id="pfDefIncome"></div>
+      <div class="field"><label>Stability %</label><input id="pfDefStability"></div>
+    </div>
+
     <button class="btn" onclick="saveProfile()">Save Profile</button>
   </div>
 
@@ -191,7 +216,7 @@
       <div class="field"><label>Current price</label><input id="apPrice" type="number"></div>
       <div class="field"><label>Annual dividend / unit</label><input id="apDiv" type="number"></div>
       <div class="field"><label>Dividend tax override</label><input id="apTax" type="number"></div>
-      <div class="field"><label>Invested (&#8369;)</label><input id="apInvested" type="number"></div>
+      <div class="field"><label>Invested (₱)</label><input id="apInvested" type="number"></div>
       <div class="field"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="apIlliq"> Illiquid</label></div>
     </div>
     <button class="btn" onclick="addPos()">Add Holding</button>
@@ -214,7 +239,7 @@
       <button class="btn alt" onclick="document.getElementById('importFile').click()">&#11014;&#65039; Import JSON</button>
     </div>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="if(this.files[0])importJSON(this.files[0])">
-    <p class="note">Tip: save your export to a Google Drive folder named 'Portfolio Backups'.</p>
+    <p class="note">Existing JSON exports remain compatible. Missing newer profile fields are filled with safe defaults on load.</p>
   </div>
 </section>
 
@@ -222,80 +247,40 @@
 <section id="tab-help" class="tab">
   <div class="card help">
     <h3>&#128075; Welcome</h3>
-    <p>This is our private tool to track the family's investments and goals. Nothing is sent anywhere &mdash; all our numbers stay inside this browser.</p>
+    <p>This dashboard tracks portfolio progress, income coverage, allocation, and long-term planning using data stored in your browser.</p>
 
-    <h3>&#129351; Golden Rules</h3>
+    <h3>&#129351; Good housekeeping</h3>
     <ol>
-      <li>Your data lives <b>only in this browser</b>.</li>
-      <li><b>Export a backup regularly</b> to Google Drive.</li>
-      <li><b>Update prices weekly</b>.</li>
+      <li>Keep prices and dividends reasonably current.</li>
+      <li>Export a backup regularly.</li>
+      <li>Review goals when contribution plans or spending assumptions change.</li>
     </ol>
 
-    <h3>&#9999;&#65039; How to update our numbers</h3>
+    <h3>&#9999;&#65039; Updating data</h3>
     <ol>
-      <li>Tap the &#9881;&#65039; <b>Settings</b> tab.</li>
-      <li>Under <b>Holdings</b>, find the fund's card and type the new <b>Current price</b>.</li>
-      <li>Update the <b>FX rate</b> field when the dollar moves.</li>
-      <li>To add a new holding, fill the <b>Add Holding</b> form and press <b>Add Holding</b>.</li>
-      <li>After changing goals, press <b>Save Profile</b>.</li>
+      <li>Open <b>Settings</b>.</li>
+      <li>Update holdings, prices, FX, or goal assumptions.</li>
+      <li>Save your profile to refresh dashboard metrics and tools.</li>
     </ol>
 
-    <h3>&#128197; How often to update what</h3>
-    <table>
-      <thead><tr><th>Item</th><th>How often</th></tr></thead>
-      <tbody>
-        <tr><td>Prices</td><td>Weekly</td></tr>
-        <tr><td>Dividends</td><td>Quarterly</td></tr>
-        <tr><td>FX rate</td><td>Weekly</td></tr>
-        <tr><td>Invested amount</td><td>Only when you buy more</td></tr>
-        <tr><td>Goals / profile</td><td>Rarely</td></tr>
-      </tbody>
-    </table>
-
-    <h3>&#128276; The notification bell</h3>
-    <p>&#128994; fresh &nbsp; &#128993; due soon &nbsp; &#128308; overdue. The number on the bell = how many items are overdue.</p>
-
-    <h3>&#128190; Backing up (important)</h3>
-    <ol>
-      <li>&#9881;&#65039; Settings &rarr; <b>Export JSON</b>.</li>
-      <li>Save the file to your Google Drive folder <b>'Portfolio Backups'</b>.</li>
-      <li>To restore, use <b>Import JSON</b> and pick your latest file.</li>
-    </ol>
-
-    <h3>&#128241; Moving to a new phone or computer</h3>
-    <p>Open the page, go to Settings &rarr; <b>Import JSON</b>, and choose the latest backup.</p>
-
-    <h3>&#128214; What the numbers mean</h3>
+    <h3>&#128214; What the dashboard shows</h3>
     <ul>
-      <li><b>Coast FIRE</b> &mdash; the amount that can grow to retirement without new money.</li>
-      <li><b>Total Invested</b> &mdash; money we put in.</li>
-      <li><b>Net Annual Income</b> &mdash; dividends after tax we can spend.</li>
-      <li><b>Unrealized Gain</b> &mdash; paper profit.</li>
-      <li><b>Real Return</b> &mdash; growth after inflation.</li>
-      <li><b>Semiconductor exposure</b> &mdash; how much is in chip companies.</li>
-      <li><b>Buckets</b> &mdash; Growth / Income / Stability.</li>
+      <li><b>Coast FIRE Progress</b> tracks progress toward a capital level that could grow into the long-term retirement target without additional contributions.</li>
+      <li><b>Income Coverage</b> tracks portfolio dividend income relative to the configured coverage target, while also showing annual income against total annual spending.</li>
+      <li><b>Total Invested</b> shows cumulative capital contributed.</li>
+      <li><b>Allocation charts</b> show how portfolio value is distributed by bucket and by holding.</li>
     </ul>
 
-    <h3>&#129518; How the math works</h3>
-    <ul>
-      <li><b>Coast FIRE</b> = future need &divide; growth.</li>
-      <li><b>Target price</b> = dividend after tax &divide; desired yield.</li>
-      <li><b>Capital to add</b> = income gap &divide; net yield.</li>
-    </ul>
+    <h3>&#128181; Income notes</h3>
+    <p>Income views focus on spendable dividends after tax. Auto-reinvested products can remain in the portfolio but are not counted in income calculations.</p>
 
-    <h3>&#128736;&#65039; If something looks wrong</h3>
-    <ul>
-      <li>Numbers zero? Press <b>Save</b>.</li>
-      <li>Chart missing? Refresh the page.</li>
-      <li>Lost data? <b>Import</b> your backup.</li>
-    </ul>
+    <h3>&#128190; Backups</h3>
+    <p>Use <b>Export JSON</b> before major edits. To restore data on another device, open the dashboard and use <b>Import JSON</b>.</p>
 
     <h3>&#128274; Privacy</h3>
-    <p>Data stays in this browser; the website only hosts the code.</p>
-    <p class="note">Personal planning tool &mdash; not financial advice.</p>
+    <p>Data stays in this browser unless you export it yourself. This dashboard is for personal planning and record keeping.</p>
   </div>
 </section>
-
 </div>
 
 <nav class="bottomnav">
@@ -304,7 +289,6 @@
   <button class="navbtn" data-tab="data" onclick="showTab('data')">&#9881;&#65039;<span>Settings</span></button>
   <button class="navbtn" data-tab="help" onclick="showTab('help')">&#10067;<span>Help</span></button>
 </nav>
-
 <script src="app.js"></script>
 </body>
 </html>
