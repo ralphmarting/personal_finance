@@ -14,7 +14,7 @@
 <header class="header">
   <div>
     <h1>Portfolio Dashboard</h1>
-    <span>Your path to long-term financial progress</span>
+    <span>Your Financial Freedom Command Center</span>
   </div>
   <div style="position:relative">
     <button id="bellBtn">&#128276;<span id="bellBadge" class="badge bad"></span></button>
@@ -33,18 +33,18 @@
 <section id="tab-dashboard" class="tab active">
   <div class="grid cols-3">
     <div class="hero">
-      <div class="label">COAST FIRE PROGRESS</div>
-      <div class="big" id="coastPct">-</div>
-      <div class="sub" id="coastSub"></div>
+      <div class="label">WEALTH ENGINE</div>
+      <div class="big" id="totalInvested">-</div>
+      <div class="sub">Every peso deployed is working for your future.</div>
+    </div>
+    <div class="hero">
+      <div class="label">FREEDOM METER</div>
+      <div class="big" id="coastTarget">-</div>
+      <div class="sub" id="coastSub">-</div>
       <div class="bar hero-bar"><span id="coastHeroBar"></span></div>
     </div>
     <div class="hero">
-      <div class="label">TOTAL INVESTED</div>
-      <div class="big" id="totalInvested">-</div>
-      <div class="sub">Cost basis you put in</div>
-    </div>
-    <div class="hero">
-      <div class="label">INCOME COVERAGE</div>
+      <div class="label">PAYCHECK REPLACEMENT</div>
       <div class="big" id="incomeCoverage">-</div>
       <div class="sub" id="incomeCoverageSub"></div>
       <div class="bar hero-bar"><span id="incomeHeroBar"></span></div>
@@ -52,9 +52,21 @@
   </div>
 
   <div class="grid cols-3">
-    <div class="metric"><div class="label">Current Value</div><div class="val" id="currentValue">-</div></div>
-    <div class="metric"><div class="label">Unrealized Gain</div><div class="val" id="gainPct">-</div></div>
-    <div class="metric"><div class="label">Net Monthly Income</div><div class="val" id="netMonthly">-</div><div class="note">Spendable dividends only</div></div>
+    <div class="metric">
+      <div class="label">Total Portfolio Value</div>
+      <span class="val" id="currentValue">-</span> <span class="val" id="gainPct">-</span>
+      <div class="note">Unrealized Gain</div>
+    </div>
+    <div class="metric">
+      <div class="label">Coast Target</div>
+      <span class="val" id="coastTargetMetric">-</span>
+      <div class="note">A choice to stop investing</div>
+    </div>
+    <div class="metric">
+      <div class="label">Net Monthly Income</div>
+      <div class="val" id="netMonthly">-</div>
+      <div class="note">Aiming to cover <span id="incomeCoverageTargetPct">-</span> of annual lifestyle</div>
+    </div>
   </div>
 
   <div class="card"><b>&#127937; Next Up</b><p id="nextUp" style="margin:8px 0"></p><div class="bar mini"><span id="nextUpBar"></span></div></div>
@@ -84,10 +96,10 @@
   <div class="card" style="background:linear-gradient(135deg,#0e7d8b,#17a673);color:#fff">
     <h3 style="color:#fff">&#129496; Income Resilience</h3>
     <div style="font-size:2rem;font-weight:800" id="resMonthly">-</div>
-    <p style="opacity:.92;margin:6px 0 0">This view focuses on spendable dividends after tax and excludes auto-reinvested products.</p>
+    <p style="opacity:.92;margin:6px 0 0">🌊 Ignore the noise. Dividends keep flowing whether markets cheer or panic.</p>
   </div>
 
-  <div class="card"><h3>Portfolio Value Over Time</h3><div class="chartwrap"><canvas id="chartValue"></canvas></div><p id="valueEmpty" style="display:none;color:var(--muted)">No snapshots yet — save one in Settings.</p></div>
+  <div class="card"><h3>Portfolio Value Over Time</h3><div class="chartwrap"><canvas id="chartValue"></canvas></div><p id="valueEmpty" style="display:none;color:var(--muted)">📸 Start tracking your journey. Save your first snapshot and watch your wealth grow over time.</p></div>
 
   <div class="quest">
     <h2>&#127942; Milestones &amp; Quests</h2>
@@ -168,6 +180,7 @@
     </div>
     <button class="btn" onclick="computeProjector()">Project</button>
     <div id="pjResult" style="margin-top:12px"></div>
+    <p class="note">Explore how today's decisions shape tomorrow's financial independence.</p>
   </div>
 </section>
 
@@ -249,7 +262,7 @@
     <h3>&#128075; Welcome</h3>
     <p>This dashboard tracks portfolio progress, income coverage, allocation, and long-term planning using data stored in your browser.</p>
 
-    <h3>&#129351; Good housekeeping</h3>
+    <h3>🛠 Wealth Builder Best Practices</h3>
     <ol>
       <li>Keep prices and dividends reasonably current.</li>
       <li>Export a backup regularly.</li>
@@ -263,7 +276,7 @@
       <li>Save your profile to refresh dashboard metrics and tools.</li>
     </ol>
 
-    <h3>&#128214; What the dashboard shows</h3>
+    <h3>🎯 Your Freedom Dashboard Explained</h3>
     <ul>
       <li><b>Coast FIRE Progress</b> tracks progress toward a capital level that could grow into the long-term retirement target without additional contributions.</li>
       <li><b>Income Coverage</b> tracks portfolio dividend income relative to the configured coverage target, while also showing annual income against total annual spending.</li>
