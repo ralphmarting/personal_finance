@@ -90,14 +90,14 @@
       <ul id="legendHolding" class="legend"></ul>
     </div>
   </div>
-
-  <div class="card"><h3>Where Your Monthly Income Comes From</h3><div class="chartwrap"><canvas id="chartIncome"></canvas></div><p class="note">MP2 is excluded from income calculations.</p></div>
-
+  
   <div class="card" style="background:linear-gradient(135deg,#0e7d8b,#17a673);color:#fff">
-    <h3 style="color:#fff">&#129496; Income Resilience</h3>
-    <div style="font-size:2rem;font-weight:800" id="resMonthly">-</div>
+    <h3 style="color:#fff">&#129496; Income-FI: Freedom through Dividends</h3>
+    <p id="incomeFiMessage" style="margin:0 0 10px;line-height:1.7;opacity:.95"></p>
     <p style="opacity:.92;margin:6px 0 0">🌊 Ignore the noise. Dividends keep flowing whether markets cheer or panic.</p>
   </div>
+
+  <div class="card"><h3>Where Your Monthly Income Comes From</h3><div class="chartwrap"><canvas id="chartIncome"></canvas></div><p class="note">MP2 is excluded from income calculations.</p></div>
 
   <div class="card"><h3>Portfolio Value Over Time</h3><div class="chartwrap"><canvas id="chartValue"></canvas></div><p id="valueEmpty" style="display:none;color:var(--muted)">📸 Start tracking your journey. Save your first snapshot and watch your wealth grow over time.</p></div>
 
@@ -140,7 +140,7 @@
       </div>
       <div>
         <p>Annual gap to planner target: <b id="divGap"></b></p>
-        <p>Portfolio yield on cost: <b id="divYoc"></b></p>
+        <p>Portfolio yield on cost: <b id="plannerYoc"></b></p>
       </div>
     </div>
     <p id="divResult" style="margin-top:10px"></p>
@@ -148,7 +148,7 @@
       <thead><tr><th>Holding</th><th>Current Price</th><th>Current Net Monthly</th><th>Net Yield</th><th>Target Price</th><th>Additional Capital</th></tr></thead>
       <tbody id="divTable"></tbody>
     </table>
-      <div class="note" style="padding-top:10px">Each row estimates the additional capital needed for that specific holding to reach the planner target on its own.</div>
+      <div class="note" style="padding-top:10px">Data are only from Income Bucket. Each row estimates the additional capital needed for that specific holding to reach the planner target on its own.</div>
   </div>
 
   <div id="tool-rebalance" class="tool card">
@@ -167,7 +167,7 @@
   </div>
 
   <div id="tool-projector" class="tool card">
-    <h3>Coast FIRE Projector</h3>
+    <h3>Early Retirement Projector</h3>
     <div class="grid cols-3">
       <div class="field"><label>Current age</label><input id="pjAge"></div>
       <div class="field"><label>Retire age</label><input id="pjRetire"></div>
@@ -177,10 +177,17 @@
       <div class="field"><label>Annual spending</label><input id="pjSpend"></div>
       <div class="field"><label>Withdrawal multiple</label><select id="pjMult"><option>25</option><option>30</option></select></div>
       <div class="field"><label>Current portfolio</label><input id="pjPort"></div>
+      <div class="field" style="grid-column:1 / -1">
+        <div class="cardhead compact-top" style="justify-content:flex-start;gap:12px">
+          <span style="font-weight:600;color:var(--ink)">Account for income bucket coverage target</span>
+          <label class="switch"><input type="checkbox" id="pjIncludeIncome"><span class="slider"></span></label>
+        </div>
+        <div class="note" style="margin-top:6px">When enabled, the projector lowers the required retirement fund using your configured income coverage target.</div>
+      </div>
     </div>
     <button class="btn" onclick="computeProjector()">Project</button>
     <div id="pjResult" style="margin-top:12px"></div>
-    <p class="note">Explore how today's decisions shape tomorrow's financial independence.</p>
+    <p class="note">Retirement math uses Growth + Stability buckets only. When enabled, the income-bucket toggle reduces the portfolio target by your income coverage target.</p>
   </div>
 </section>
 
@@ -205,6 +212,7 @@
       <div class="field"><label>Income bucket return (%)</label><input id="pfRetIncome"></div>
       <div class="field"><label>Stability bucket return (%)</label><input id="pfRetStability"></div>
     </div>
+    <p class="note">Auto mode uses Growth + Stability bucket returns and the Growth/Stability default distribution weights for coast math.</p>
 
     <h4 class="section-mini">Default Distribution Profile</h4>
     <div class="grid cols-3">

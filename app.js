@@ -32,6 +32,7 @@ const CATEGORIES_BY_TYPE = {
   Family: '👨‍👩‍👧‍👦'
 };
 let REBALANCE_MODE = 'current';
+let incomeFiMessageText = '';
 
 /* ===== helpers ===== */
 function el(id) {
@@ -72,9 +73,12 @@ function num(value, fallback) {
   return Number.isFinite(parsed) ? parsed : (fallback || 0);
 }
 
-function peso(value) {
+function peso(value, decimals) {
   const amount = num(value, 0);
-  return '₱' + amount.toLocaleString('en-PH', { maximumFractionDigits: 0 });
+  const options = decimals == null
+    ? { maximumFractionDigits: 0 }
+    : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+  return '₱' + amount.toLocaleString('en-PH', options);
 }
 
 function usd(value) {
@@ -290,6 +294,7 @@ function ensureDefaults() {
   }
   S.ui.tool = S.ui.tool || 'dividend';
   S.ui.excludeIlliquidCharts = S.ui.excludeIlliquidCharts !== false;
+  S.ui.projectorIncludeIncomeBucket = !!S.ui.projectorIncludeIncomeBucket;
 }
 
 function load() {
@@ -371,18 +376,41 @@ function spendablePayers() {
   });
 }
 
-function getPortfolioTotals() {
+function incomeBucketPayers() {
+  return S.positions.filter(function (position) {
+    return position && position.bucket === 'Income' && num(position.div) > 0 && !isMP2(position);
+  });
+}
+
+function getIncomeBucketTotals() {
   let investedTotal = 0;
   let currentValueTotal = 0;
   let annualIncomeTotal = 0;
 
+  incomeBucketPayers().forEach(function (position) {
+    investedTotal += num(position.invested, 0);
+    currentValueTotal += valuePHP(position);
+    annualIncomeTotal += incomePHP(position);
+  });
+
+  return {
+    invested: investedTotal,
+    currentValue: currentValueTotal,
+    annualIncome: annualIncomeTotal,
+    monthlyIncome: annualIncomeTotal / 12,
+    yieldOnCost: investedTotal ? (annualIncomeTotal / investedTotal) * 100 : 0,
+    yieldNow: currentValueTotal ? (annualIncomeTotal / currentValueTotal) * 100 : 0
+  };
+}
+
+function getPortfolioTotals() {
+  let investedTotal = 0;
+  let currentValueTotal = 0;
+  const incomeBucketTotals = getIncomeBucketTotals();
+
   S.positions.forEach(function (position) {
     investedTotal += num(position.invested, 0);
     currentValueTotal += valuePHP(position);
-
-    if (!isMP2(position)) {
-      annualIncomeTotal += incomePHP(position);
-    }
   });
 
   const gain = currentValueTotal - investedTotal;
@@ -392,10 +420,10 @@ function getPortfolioTotals() {
     currentValue: currentValueTotal,
     gain: gain,
     gainPct: investedTotal ? (gain / investedTotal) * 100 : 0,
-    annualIncome: annualIncomeTotal,
-    monthlyIncome: annualIncomeTotal / 12,
-    yieldOnCost: investedTotal ? (annualIncomeTotal / investedTotal) * 100 : 0,
-    yieldNow: currentValueTotal ? (annualIncomeTotal / currentValueTotal) * 100 : 0
+    annualIncome: incomeBucketTotals.annualIncome,
+    monthlyIncome: incomeBucketTotals.monthlyIncome,
+    yieldOnCost: incomeBucketTotals.yieldOnCost,
+    yieldNow: incomeBucketTotals.yieldNow
   };
 }
 
@@ -453,34 +481,34 @@ function coastEligibleValue() {
   }, 0);
 }
 
+function coastBucketWeights() {
+  const distribution = S.profile.defaultDistribution || { Growth: 70, Income: 20, Stability: 10 };
+  const growthWeight = num(distribution.Growth, 70);
+  const stabilityWeight = num(distribution.Stability, 10);
+  const totalCoastWeight = growthWeight + stabilityWeight;
+
+  return {
+    Growth: totalCoastWeight ? (growthWeight / totalCoastWeight) : 0,
+    Stability: totalCoastWeight ? (stabilityWeight / totalCoastWeight) : 0
+  };
+}
+
+function coastAutoReturnRate() {
+  const weights = coastBucketWeights();
+  const bucketRates = S.profile.bucketReturns || { Growth: 0.07, Income: 0.045, Stability: 0.025 };
+
+  return (
+    weights.Growth * num(bucketRates.Growth, 0.07) +
+    weights.Stability * num(bucketRates.Stability, 0.025)
+  );
+}
+
 function realReturn() {
   if (S.profile.realReturnMode === 'manual') {
     return num(S.profile.realReturnManual, 0.06);
   }
 
-  const totalsByBucket = { Growth: 0, Income: 0, Stability: 0 };
-  let denominator = 0;
-
-  nonInsurancePositions().forEach(function (position) {
-    const value = valuePHP(position);
-
-    if (totalsByBucket[position.bucket] != null) {
-      totalsByBucket[position.bucket] += value;
-      denominator += value;
-    }
-  });
-
-  if (!denominator) {
-    return 0.06;
-  }
-
-  const bucketRates = S.profile.bucketReturns;
-  return (
-    (totalsByBucket.Growth * bucketRates.Growth +
-      totalsByBucket.Income * bucketRates.Income +
-      totalsByBucket.Stability * bucketRates.Stability) /
-    denominator
-  );
+  return coastAutoReturnRate() || 0.06;
 }
 
 function getCoastMetrics() {
@@ -645,6 +673,22 @@ function renderBell() {
   }
 }
 
+function buildIncomeFiMessage(yieldOnCost, monthlyIncome) {
+  const yocValue = num(yieldOnCost, 0).toFixed(2);
+  const monthlyValue = num(monthlyIncome, 0).toFixed(2).toLocaleString('en-PH');
+  const emphasizedYoc = '<span style="font-size:1.5rem;font-weight:700">' + yocValue + '%</span>';
+  const emphasizedMonthly = '<span style="font-size:1.5rem;font-weight:700">₱' + monthlyValue + '</span>';
+  const messages = [
+    'Talk about cash flow leverage! Your income bucket is currently flexing a ' + emphasizedYoc + ' Return on Original Capital, handing you ' + emphasizedMonthly + ' in monthly freedom cash on pure autopilot. Markets will swing and prices will bleed, but your cash flow engine doesn’t care about short-term noise—every down day is just a discount sale on your independence. Redeploy that yield to compound your empire, or treat yourself for staying the course!',
+    'Your money is officially fighting for your freedom! Operating at a bad-ass ' + emphasizedYoc + ' Yield on Cost, your portfolio is churning out ' + emphasizedMonthly + ' of net cash flow every single month. When red markets hit and panic sets in, remember: price is noise, but yield is real. Bear markets are where true wealth is built—keep stacking discounted shares, lock in higher future yields, and watch your monthly freedom check grow!',
+    'Your freedom engine is running at ' + emphasizedYoc + ' Yield on Cost—unlocking ' + emphasizedMonthly + '/month in passive cash. Red market days are just your strategy on sale; stick to the plan, grab a little treat if you’ve earned it, and keep buying back your time piece by piece.',
+    'Your income bucket is no longer just sitting there—it’s building your exit plan. At ' + emphasizedYoc + ' Yield on Cost, you’re already generating ' + emphasizedMonthly + '/month in cash flow that can buy back time, fund your freedom, and keep the mission moving when markets get noisy.',
+    'Every dividend check is a vote for your future. With ' + emphasizedYoc + ' Yield on Cost, your portfolio is sending ' + emphasizedMonthly + '/month of freedom cash your way—proof that patience, discipline, and compounding are still the ultimate wealth hack.'
+  ];
+
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+
 function renderDashboard() {
   const snapshot = getDashboardSnapshot();
   const portfolioTotals = snapshot.portfolioTotals;
@@ -665,8 +709,14 @@ function renderDashboard() {
     gainNode.className = 'val ' + (portfolioTotals.gain >= 0 ? 'up' : 'down');
   }
 
-  setText('netMonthly', peso(portfolioTotals.monthlyIncome));
-  setText('resMonthly', peso(portfolioTotals.monthlyIncome));
+  setText('netMonthly', peso(portfolioTotals.monthlyIncome, 2));
+  const incomeFiNode = el('incomeFiMessage');
+  if (incomeFiNode) {
+    if (!incomeFiMessageText) {
+      incomeFiMessageText = buildIncomeFiMessage(portfolioTotals.yieldOnCost, portfolioTotals.monthlyIncome);
+    }
+    incomeFiNode.innerHTML = incomeFiMessageText;
+  }
   setText('incomeCoverageTargetPct', pct(S.profile.incomeCoverageTargetPct));
   setText('coastTargetMetric', peso(coastMetrics.coastTarget));
 
@@ -1144,15 +1194,21 @@ function renderDividend() {
   const desiredYield = (num((el('divDesiredYield') || {}).value, 7)) / 100;
   const targetMonthly = num((el('divTarget') || {}).value, currentIncomeTargetMonthly());
   const targetAnnual = targetMonthly * 12;
-  const portfolioTotals = getPortfolioTotals();
+  const plannerTotals = getIncomeBucketTotals();
+  const incomeTargetAnnual = currentIncomeTargetAnnual();
+  const incomeTargetPct = incomeTargetAnnual ? (plannerTotals.annualIncome / incomeTargetAnnual) * 100 : 0;
 
-  setText('divCurrent', peso(portfolioTotals.annualIncome));
-  setText('divCoverage', pct(incomeCoverageSpendingPct()));
-  setText('divGap', peso(annualIncomeGap(targetAnnual)));
-  setText('divYoc', pct(portfolioTotals.yieldOnCost, 2));
+  setText('divCurrent', peso(plannerTotals.annualIncome));
+  setText('divCoverage', pct(incomeTargetPct));
+  setText('divGap', peso(Math.max(targetAnnual - plannerTotals.annualIncome, 0)));
+  setText('plannerYoc', pct(plannerTotals.yieldOnCost, 2));
   setText('divResult', '');
 
-  const rows = spendablePayers().map(function (position) {
+  const rows = incomeBucketPayers().slice().sort(function (a, b) {
+    const aYield = valuePHP(a) ? (incomePHP(a) / valuePHP(a)) : 0;
+    const bYield = valuePHP(b) ? (incomePHP(b) / valuePHP(b)) : 0;
+    return bYield - aYield;
+  }).map(function (position) {
     const currentValue = valuePHP(position);
     const netYield = currentValue ? (incomePHP(position) / currentValue) : 0;
     const currentPrice = num(position.currentPrice);
@@ -1160,10 +1216,15 @@ function renderDividend() {
     const currentAnnualIncome = incomePHP(position);
     const additionalAnnualNeeded = Math.max(targetAnnual - currentAnnualIncome, 0);
     const targetPrice = (num(position.div) * (1 - effectiveTaxRate(position))) / (desiredYield || 0.0001);
-    const formatter = position.currency === 'USD' ? usd : peso;
+    const priceFormatter = function (value) {
+      const amount = num(value, 0);
+      const options = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+      return (position.currency === 'USD' ? '$' : '₱') + amount.toLocaleString(position.currency === 'USD' ? 'en-US' : 'en-PH', options);
+    };
     const additionalCapital = netYield > 0 ? (additionalAnnualNeeded / netYield) : 0;
+    const showBuy = currentPrice < targetPrice;
 
-    return '<tr><td>' + position.ticker + '</td><td>' + formatter(currentPrice) + '</td><td>' + peso(currentMonthly) + '</td><td>' + pct(netYield * 100, 2) + '</td><td>' + formatter(targetPrice) + '</td><td>' + (netYield > 0 ? peso(additionalCapital) : '—') + '</td></tr>';
+    return '<tr><td>' + position.ticker + '</td><td>' + priceFormatter(currentPrice) + '</td><td>' + peso(currentMonthly) + '</td><td>' + pct(netYield * 100, 2) + '</td><td class="' + (showBuy ? 'buy' : 'wait') + '">' + priceFormatter(targetPrice) + '</td><td>' + (netYield > 0 ? peso(additionalCapital) : '—') + '</td></tr>';
   });
 
   setHtml('divTable', rows.join(''));
@@ -1281,6 +1342,10 @@ function loadDefaultDistribution() {
   toast('Loaded default distribution profile.');
 }
 
+function projectorIncludeIncomeBucket() {
+  return !!(S.ui && S.ui.projectorIncludeIncomeBucket);
+}
+
 function renderProjector() {
   const profile = S.profile;
   function setValue(id, value) {
@@ -1296,7 +1361,18 @@ function renderProjector() {
   setValue('pjStep', (profile.contribStepUp * 100).toFixed(1));
   setValue('pjReturn', (realReturn() * 100).toFixed(2));
   setValue('pjSpend', profile.annualSpending);
-  setValue('pjPort', Math.round(getPortfolioTotals().currentValue));
+  setValue('pjPort', Math.round(coastEligibleValue()));
+
+  const incomeToggle = el('pjIncludeIncome');
+  if (incomeToggle) {
+    incomeToggle.checked = projectorIncludeIncomeBucket();
+    incomeToggle.onchange = function () {
+      S.ui = S.ui || {};
+      S.ui.projectorIncludeIncomeBucket = incomeToggle.checked;
+      save();
+      computeProjector();
+    };
+  }
 }
 
 function computeProjector() {
@@ -1307,32 +1383,60 @@ function computeProjector() {
   const returnRate = num((el('pjReturn') || {}).value, 6) / 100;
   const spending = num((el('pjSpend') || {}).value, 0);
   const withdrawalMultiple = num((el('pjMult') || {}).value, 30);
-  let portfolioValue = num((el('pjPort') || {}).value, 0);
+  const startPortfolio = num((el('pjPort') || {}).value, 0);
+  const useIncomeBucket = projectorIncludeIncomeBucket();
+  const coverageTarget = num(S.profile.incomeCoverageTargetPct, 0) / 100;
+  const fullRetirementNeed = spending * withdrawalMultiple;
+  const adjustedRetirementNeed = useIncomeBucket ? Math.max(fullRetirementNeed * (1 - coverageTarget), 0) : fullRetirementNeed;
 
-  const fireNumber = spending * withdrawalMultiple;
-  const target = Math.ceil((retireAge > age ? (fireNumber / Math.pow(1 + returnRate, retireAge - age)) : fireNumber) / 250000) * 250000;
-
-  let coastAge = null;
+  let portfolioValue = startPortfolio;
   let annualContribution = monthlyContribution * 12;
-  for (let year = age; year < retireAge; year++) {
-    const grownValue = portfolioValue * Math.pow(1 + returnRate, retireAge - year);
-    if (grownValue >= fireNumber && coastAge === null) {
-      coastAge = year;
+  let retirementAge = null;
+  let projectedValueAtRetireAge = null;
+  let projectedValueAtEarlyRetireAge = null;
+  let contributing = true;
+
+  for (let year = age; year <= retireAge; year++) {
+    portfolioValue = portfolioValue * (1 + returnRate);
+
+    if (contributing) {
+      portfolioValue += annualContribution;
     }
-    portfolioValue = portfolioValue * (1 + returnRate) + annualContribution;
+
+    if (contributing && retirementAge === null && portfolioValue >= adjustedRetirementNeed) {
+      retirementAge = year;
+      projectedValueAtEarlyRetireAge = portfolioValue;
+      contributing = false;
+    }
+
+    if (!contributing) {
+      portfolioValue -= spending;
+    }
+
+    if (year === retireAge) {
+      projectedValueAtRetireAge = portfolioValue;
+    }
+
     annualContribution *= (1 + step);
   }
 
-  if (portfolioValue >= fireNumber && coastAge === null) {
-    coastAge = retireAge;
-  }
+  const canRetireByTargetAge = retirementAge != null && retirementAge <= retireAge;
+  const earlyRetireLabel = canRetireByTargetAge ? retirementAge : ('>' + retireAge);
+  const projectedEndPortfolio = projectedValueAtEarlyRetireAge != null ? projectedValueAtEarlyRetireAge : portfolioValue;
+  const projectedPortfolioAtRetireAge = projectedValueAtRetireAge != null ? projectedValueAtRetireAge : portfolioValue;
 
   setHtml(
     'pjResult',
-    'Coast target today (rounded): <b>' + peso(target) + '</b><br>' +
-    'FIRE number: <b>' + peso(fireNumber) + '</b><br>' +
-    'Coast FIRE reached at age: <b>' + (coastAge == null ? ('>' + retireAge) : coastAge) + '</b><br>' +
-    'Projected value at age ' + retireAge + ': <b>' + peso(portfolioValue) + '</b>'
+    '<div class="projector-result-card">' +
+      '<div class="projector-kicker">🧭 Early retirement readiness</div>' +
+      '<div class="projector-title">' + (canRetireByTargetAge ? ('You could retire as early as age ' + retirementAge + '.') : ('You would not reach retirement readiness by age ' + retireAge + '.')) + '</div>' +
+      '<div class="projector-metrics">' +
+        '<div class="projector-metric"><div class="label">' + (useIncomeBucket ? 'Coast FIRE + Income-Fi' : 'Coast FIRE Number') + '</div><div class="value">' + peso(adjustedRetirementNeed) + '</div></div>' +
+        '<div class="projector-metric"><div class="label">Projected end portfolio (RETIRE)</div><div class="value">' + peso(projectedEndPortfolio) + '</div></div>' +
+        '<div class="projector-metric"><div class="label">Projected end portfolio (CONTINUE)</div><div class="value">' + peso(projectedPortfolioAtRetireAge) + '</div></div>' +
+      '</div>' +
+      '<p class="projector-footnote">Your full retirement need is <b>' + peso(fullRetirementNeed) + '</b>. ' + (useIncomeBucket ? ('With your income coverage target of ' + pct(S.profile.incomeCoverageTargetPct) + ', the adjusted target becomes <b>' + peso(adjustedRetirementNeed) + '</b>.') : ('Turn on the income-bucket toggle to see how your income coverage target reduces the portfolio size needed.')) + ' If you stop contributing at the early-retirement age and withdraw your annual spending, the portfolio at age ' + retireAge + ' becomes <b>' + peso(projectedEndPortfolio) + '</b>. If you instead keep contributing through the input retire age with no withdrawals, it becomes <b>' + peso(projectedPortfolioAtRetireAge) + '</b>.</p>' +
+    '</div>'
   );
 }
 
