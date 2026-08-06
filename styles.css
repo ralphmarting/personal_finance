@@ -126,8 +126,13 @@ canvas{max-height:300px}
 .projector-copy{margin:0 0 12px;color:var(--muted);line-height:1.6}
 .projector-shell{display:flex;flex-direction:column;gap:12px}
 .projector-hero{background:linear-gradient(135deg,rgba(14,125,139,.16),rgba(23,195,178,.14));border:1px solid rgba(14,125,139,.22);border-radius:18px;padding:18px;box-shadow:var(--shadow-sm)}
+.projector-chart-panel{background:rgba(255,255,255,.76);border:1px solid rgba(228,236,245,.95);border-radius:14px;padding:12px;margin:12px 0}
 .projector-story{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px}
 .projector-story-card{background:rgba(255,255,255,.78);border:1px solid rgba(228,236,245,.9);border-radius:12px;padding:12px}
+.projector-metric-wide{grid-column:span 2}
+.projector-levers{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:8px}
+.projector-levers > div{background:rgba(255,255,255,.75);border:1px solid rgba(228,236,245,.95);border-radius:10px;padding:10px}
+.projector-mini-label{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
 .projector-story-card .label{font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
 .projector-story-card .value{font-size:1.05rem;font-weight:700;color:var(--ink)}
 .projector-story-card .hint{margin-top:6px;font-size:.84rem;color:var(--muted);line-height:1.5}

@@ -263,74 +263,66 @@
             </div>
             <p id="pjResultCopy" class="projector-copy">The planner will show when your portfolio reaches coast FI, how
               that target changes over time, and what it takes to reach your target coast age.</p>
-            <div class="projector-story">
-              <div class="projector-story-card">
-                <div class="label">Coast FI intersection</div>
-                <div id="pjCoastIntersectionValue" class="value">—</div>
-                <div class="hint">The age when your portfolio crosses the coast target for that year.</div>
+            <div class="projector-chart-panel">
+              <div class="cardhead compact-top" style="margin-bottom:8px">
+                <div>
+                  <div class="label">Growth + Stability path</div>
+                  <div class="note">Year-by-year cumulative deposits and returns from your current Growth + Stability plan.</div>
+                </div>
               </div>
-              <div class="projector-story-card">
-                <div class="label">Coast FI target at that age</div>
+              <div class="chartwrap"><canvas id="pjYearlyChart"></canvas></div>
+            </div>
+            <div class="projector-metrics">
+              <div class="projector-metric">
+                <div class="label">Age when coast FI number is reached</div>
+                <div id="pjCoastAgeValue" class="value">—</div>
+              </div>
+              <div class="projector-metric">
+                <div class="label">Coast FI number at that age</div>
                 <div id="pjCoastTargetValue" class="value">—</div>
-                <div class="hint">This target rises as you get closer to your retirement age.</div>
               </div>
-              <div class="projector-story-card">
-                <div class="label">Portfolio at that age</div>
-                <div id="pjPortfolioAtCoastValue" class="value">—</div>
-                <div class="hint">This shows the portfolio size that makes coast FI possible.</div>
+            </div>
+            <div class="projector-metrics">
+              <div class="projector-metric projector-metric-wide">
+                <div class="label">Levers to hit target coast age</div>
+                <div class="projector-levers">
+                  <div>
+                    <span class="projector-mini-label">Increase monthly</span>
+                    <div id="pjSolveMonthlyValue" class="value">—</div>
+                  </div>
+                  <div>
+                    <span class="projector-mini-label">One-time lump sum</span>
+                    <div id="pjSolveLumpValue" class="value">—</div>
+                  </div>
+                  <div>
+                    <span class="projector-mini-label">Annual expense reduction</span>
+                    <div id="pjSolveSpendValue" class="value">—</div>
+                  </div>
+                </div>
               </div>
             </div>
             <hr>
             <div class="projector-metrics">
               <div class="projector-metric">
-                <div class="label">Projected coast age</div>
-                <div id="pjCoastAgeValue" class="value">—</div>
-              </div>
-              <div class="projector-metric">
                 <div class="label">Full FIRE age</div>
-                <div id="pjRetireAgeValue" class="value">—</div>
+                <div id="pjFullFireAgeValue" class="value">—</div>
               </div>
               <div class="projector-metric">
-                <div class="label">Adjusted annual spending</div>
-                <div id="pjAdjustedSpendingValue" class="value">—</div>
+                <div class="label">Full FIRE number</div>
+                <div id="pjFullFireValue" class="value">—</div>
               </div>
             </div>
             <div class="projector-metrics">
               <div class="projector-metric">
-                <div class="label">Full FIRE number</div>
-                <div id="pjFullFireValue" class="value">—</div>
+                <div class="label">Balance at retire age (with withdrawals)</div>
+                <div id="pjWithdrawValue" class="value">—</div>
               </div>
               <div class="projector-metric">
                 <div class="label">Balance at retire age (no withdrawals)</div>
                 <div id="pjNoWithdrawValue" class="value">—</div>
               </div>
-              <div class="projector-metric">
-                <div class="label">Balance at retire age (with withdrawals)</div>
-                <div id="pjWithdrawValue" class="value">—</div>
-              </div>
             </div>
-            <div class="projector-solver">
-              <h4 class="section-mini">Solution/s for your target coast age</h4>
-              <div class="projector-solver-grid">
-                <div class="projector-solver-card">
-                  <div class="label">Extra monthly contribution</div>
-                  <div id="pjSolveMonthlyValue" class="value">—</div>
-                  <div id="pjSolveMonthlyHint" class="hint">Needed to hit the target age with your current plan.</div>
-                </div>
-                <div class="projector-solver-card">
-                  <div class="label">One-time lump sum</div>
-                  <div id="pjSolveLumpValue" class="value">—</div>
-                  <div id="pjSolveLumpHint" class="hint">A single injection to close the gap immediately.</div>
-                </div>
-                <div class="projector-solver-card">
-                  <div class="label">Annual expense reduction</div>
-                  <div id="pjSolveSpendValue" class="value">—</div>
-                  <div id="pjSolveSpendHint" class="hint">The annual spending cut needed to make the target easier to
-                    reach.</div>
-                </div>
-              </div>
-            </div>
-            <p id="pjResultFootnote" class="projector-footnote">Changes update instantly as you adjust the inputs.</p>
+            <p class="projector-footnote">Changes update instantly as you adjust the inputs.</p>
           </div>
         </div>
         <p class="note">Retirement math uses Growth + Stability buckets only. The Income-Fi toggle reduces the annual

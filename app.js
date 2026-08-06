@@ -203,11 +203,11 @@ function seed() {
   S = {
     profile: {
       currentAge: 25,
-      retireAge: 55,
-      annualSpending: 780000,
-      monthlyContribution: 31500,
+      retireAge: 60,
+      annualSpending: 790000,
+      monthlyContribution: 30000,
       contribStepUp: 0.05,
-      incomeCoverageTargetPct: 50,
+      incomeCoverageTargetPct: 10,
       defaultNetYield: 0.07,
       domesticDivTax: 0.10,
       fxRate: 61.5,
@@ -215,8 +215,8 @@ function seed() {
       withdrawalMultiplier: 30,
       realReturnMode: 'auto',
       realReturnManual: 0.06,
-      bucketReturns: { Growth: 0.07, Income: 0.045, Stability: 0.025 },
-      defaultDistribution: { Growth: 70, Income: 20, Stability: 10 }
+      bucketReturns: { Growth: 0.07, Income: 0.015, Stability: 0.03 },
+      defaultDistribution: { Growth: 70, Income: 10, Stability: 20 }
     },
     positions: [
       createPosition('MBT', 'Metrobank', 'Income', 'PHP', 500, 78, 4.0, null, false, 30000),
@@ -499,6 +499,16 @@ function coastBucketWeights() {
   };
 }
 
+function getCoastContributionShare() {
+  const distribution = S.profile.defaultDistribution || { Growth: 70, Income: 20, Stability: 10 };
+  const growthWeight = num(distribution.Growth, 70);
+  const stabilityWeight = num(distribution.Stability, 10);
+  const incomeWeight = num(distribution.Income, 20);
+  const totalWeight = growthWeight + stabilityWeight + incomeWeight;
+
+  return totalWeight > 0 ? ((growthWeight + stabilityWeight) / totalWeight) : 1;
+}
+
 function coastAutoReturnRate() {
   const weights = coastBucketWeights();
   const bucketRates = S.profile.bucketReturns || { Growth: 0.07, Income: 0.045, Stability: 0.025 };
@@ -517,9 +527,26 @@ function realReturn() {
   return coastAutoReturnRate() || 0.06;
 }
 
-function getCoastMetrics() {
+function getCoastSpendingInputs(options) {
+  const spending = num(options && options.spending != null ? options.spending : S.profile.annualSpending, 0);
+  const useIncomeBucket = !!(options && options.useIncomeBucket);
+  const coverageTarget = normalizeCoverageRate(
+    num(options && options.coverageTarget != null ? options.coverageTarget : (useIncomeBucket ? num(S.profile.incomeCoverageTargetPct, 0) : 0), 0)
+  );
+  const effectiveAnnualSpending = useIncomeBucket ? Math.max(spending * (1 - coverageTarget), 0) : spending;
+
+  return {
+    annualSpending: spending,
+    useIncomeBucket: useIncomeBucket,
+    coverageTarget: coverageTarget,
+    effectiveAnnualSpending: effectiveAnnualSpending
+  };
+}
+
+function getCoastMetrics(options) {
+  const spendingInputs = getCoastSpendingInputs(options);
   const investmentReturnRate = realReturn();
-  const annualFireSpend = num(S.profile.annualSpending) * num(S.profile.withdrawalMultiplier, 30);
+  const annualFireSpend = spendingInputs.effectiveAnnualSpending * num(S.profile.withdrawalMultiplier, 30);
   const fireNumber = annualFireSpend;
   const yearsToRetirement = num(S.profile.retireAge) - num(S.profile.currentAge);
   const rawTarget = yearsToRetirement > 0
@@ -534,12 +561,16 @@ function getCoastMetrics() {
     target: rawTarget,
     coastTarget: rawTarget,
     currentValue: coastCurrentValue,
-    progress: fireNumber ? (coastCurrentValue / fireNumber) * 100 : 0
+    progress: fireNumber ? (coastCurrentValue / fireNumber) * 100 : 0,
+    annualSpending: spendingInputs.annualSpending,
+    effectiveAnnualSpending: spendingInputs.effectiveAnnualSpending,
+    coverageTarget: spendingInputs.coverageTarget,
+    useIncomeBucket: spendingInputs.useIncomeBucket
   };
 }
 
-function getWindDownMetrics() {
-  const coastMetrics = getCoastMetrics();
+function getWindDownMetrics(options) {
+  const coastMetrics = getCoastMetrics(options);
   const currentValue = num(coastMetrics.currentValue, 0);
   const annualFireSpend = num(coastMetrics.fireSpend, 0);
   const returnRate = num(coastMetrics.returnRate, 0);
@@ -548,12 +579,7 @@ function getWindDownMetrics() {
   const monthlyContribution = num(S.profile.monthlyContribution, 0);
   const annualStepUp = num(S.profile.contribStepUp, 0);
   const yearsRemaining = Math.max(retireAge - currentAge, 0);
-  const distribution = S.profile.defaultDistribution || { Growth: 70, Income: 20, Stability: 10 };
-  const growthWeight = num(distribution.Growth, 70);
-  const stabilityWeight = num(distribution.Stability, 10);
-  const incomeWeight = num(distribution.Income, 20);
-  const totalWeight = growthWeight + stabilityWeight + incomeWeight;
-  const growthStabilityShare = totalWeight > 0 ? ((growthWeight + stabilityWeight) / totalWeight) : 1;
+  const growthStabilityShare = getCoastContributionShare();
 
   let yearsToTarget = yearsRemaining;
   let projectedValue = currentValue;
@@ -1455,6 +1481,83 @@ function getProjectorTargetCoastAge() {
   return clamp(value, currentAge, retireAge);
 }
 
+function computeCoastIntersection(params) {
+  const age = num(params.age, 25);
+  const targetAge = num(params.targetAge, 55);
+  const currentValue = num(params.currentValue, 0);
+  const annualContribution = num(params.annualContribution, 0);
+  const annualStepUp = num(params.annualStepUp, 0);
+  const returnRate = num(params.returnRate, 0);
+  const annualFireSpend = num(params.annualFireSpend, 0);
+
+  let projectedValue = currentValue;
+  let annualContributionValue = annualContribution;
+  let targetValue = annualFireSpend;
+  let yearsToTarget = null;
+
+  if (currentValue >= annualFireSpend && annualFireSpend > 0) {
+    yearsToTarget = 0;
+    targetValue = annualFireSpend;
+  } else if (currentValue >= 0 && returnRate >= 0) {
+    for (let year = age; year <= targetAge; year++) {
+      projectedValue = projectedValue * (1 + returnRate);
+      projectedValue += annualContributionValue;
+
+      const yearsToRetirementAtThisPoint = Math.max(targetAge - year, 0);
+      targetValue = yearsToRetirementAtThisPoint > 0
+        ? annualFireSpend / Math.pow(1 + returnRate, yearsToRetirementAtThisPoint)
+        : annualFireSpend;
+
+      if (projectedValue >= targetValue) {
+        yearsToTarget = year - age;
+        break;
+      }
+
+      annualContributionValue *= (1 + annualStepUp);
+    }
+  }
+
+  return {
+    yearsToTarget: yearsToTarget,
+    projectedValue: projectedValue,
+    targetValue: targetValue
+  };
+}
+
+function buildProjectionSeries(options) {
+  const age = num(options.age, 25);
+  const targetAge = num(options.targetAge, 55);
+  const startPortfolio = num(options.startPortfolio, 0);
+  const annualContribution = num(options.annualContribution, 0);
+  const step = num(options.step, 0) / 100;
+  const returnRate = num(options.returnRate, 0.06);
+  const labels = [];
+  const deposited = [];
+  const returns = [];
+  let portfolio = startPortfolio;
+  let cumulativeDeposits = 0;
+  let cumulativeReturns = 0;
+  let contributionValue = annualContribution;
+
+  for (let year = age; year <= targetAge; year++) {
+    const annualReturn = portfolio * returnRate;
+    portfolio += annualReturn + contributionValue;
+    cumulativeDeposits += contributionValue;
+    cumulativeReturns += annualReturn;
+    labels.push(String(year));
+    deposited.push(cumulativeDeposits);
+    returns.push(cumulativeReturns);
+    contributionValue *= (1 + step);
+  }
+
+  return {
+    labels: labels,
+    deposited: deposited,
+    returns: returns,
+    portfolio: portfolio
+  };
+}
+
 function projectRetirementScenario(options) {
   const age = num(options.age, 25);
   const targetAge = num(options.targetAge, 55);
@@ -1469,38 +1572,52 @@ function projectRetirementScenario(options) {
   const useIncomeBucket = !!options.useIncomeBucket;
   const coverageTarget = normalizeCoverageRate(num(options.coverageTarget, 0));
   const withdrawalMultiple = num(options.withdrawalMultiple, 30);
-  const fullAnnualSpending = spending;
-  const effectiveAnnualSpending = useIncomeBucket ? Math.max(fullAnnualSpending * (1 - coverageTarget), 0) : fullAnnualSpending;
+  const spendingInputs = getCoastSpendingInputs({ spending: spending, useIncomeBucket: useIncomeBucket, coverageTarget: coverageTarget });
+  const fullAnnualSpending = spendingInputs.annualSpending;
+  const effectiveAnnualSpending = spendingInputs.effectiveAnnualSpending;
   const fullRetirementNeed = fullAnnualSpending * withdrawalMultiple;
   const adjustedRetirementNeed = effectiveAnnualSpending * withdrawalMultiple;
-  const annualContribution = (monthlyContribution + extraMonthly) * 12;
+  const coastContributionShare = getCoastContributionShare();
+  const annualContribution = (monthlyContribution + extraMonthly) * 12 * coastContributionShare;
+  const coastAnnualContribution = annualContribution;
 
   let portfolioNoWithdraw = startPortfolio + lumpSum;
+  let coastPortfolioNoWithdraw = startPortfolio + lumpSum;
   let annualContributionValue = annualContribution;
+  let coastAnnualContributionValue = coastAnnualContribution;
   let coastAge = null;
   let coastTargetAtIntersection = null;
   let portfolioAtIntersection = null;
 
+  const intersection = computeCoastIntersection({
+    age: age,
+    targetAge: targetAge,
+    currentValue: coastPortfolioNoWithdraw,
+    annualContribution: coastAnnualContribution,
+    annualStepUp: step,
+    returnRate: returnRate,
+    annualFireSpend: adjustedRetirementNeed
+  });
+
+  if (intersection.yearsToTarget != null) {
+    coastAge = age + intersection.yearsToTarget;
+    coastTargetAtIntersection = intersection.targetValue;
+    portfolioAtIntersection = intersection.projectedValue;
+  }
+
   for (let year = age; year <= targetAge; year++) {
     portfolioNoWithdraw = portfolioNoWithdraw * (1 + returnRate) + annualContributionValue;
-
-    const yearsToRetirementAtThisPoint = Math.max(targetAge - year, 0);
-    const coastTargetAtThisPoint = yearsToRetirementAtThisPoint > 0
-      ? effectiveAnnualSpending * withdrawalMultiple / Math.pow(1 + returnRate, yearsToRetirementAtThisPoint)
-      : effectiveAnnualSpending * withdrawalMultiple;
-
-    if (coastAge === null && year <= targetCoastAge && portfolioNoWithdraw >= coastTargetAtThisPoint) {
-      coastAge = year;
-      coastTargetAtIntersection = coastTargetAtThisPoint;
-      portfolioAtIntersection = portfolioNoWithdraw;
-    }
+    coastPortfolioNoWithdraw = coastPortfolioNoWithdraw * (1 + returnRate) + coastAnnualContributionValue;
 
     annualContributionValue *= (1 + step);
+    coastAnnualContributionValue *= (1 + step);
   }
 
   let portfolioWithWithdraw = startPortfolio + lumpSum;
   annualContributionValue = annualContribution;
   let contributing = true;
+  const withdrawalSpending = effectiveAnnualSpending;
+  let fullFireAge = null;
 
   for (let year = age; year <= targetAge; year++) {
     portfolioWithWithdraw = portfolioWithWithdraw * (1 + returnRate);
@@ -1509,15 +1626,16 @@ function projectRetirementScenario(options) {
       portfolioWithWithdraw += annualContributionValue;
     }
 
+    if (fullFireAge == null && portfolioWithWithdraw >= adjustedRetirementNeed) {
+      fullFireAge = year;
+    }
+
     if (contributing && portfolioWithWithdraw >= adjustedRetirementNeed) {
       contributing = false;
-      if (coastAge === null) {
-        coastAge = year;
-      }
     }
 
     if (!contributing) {
-      portfolioWithWithdraw -= spending;
+      portfolioWithWithdraw -= withdrawalSpending;
     }
 
     annualContributionValue *= (1 + step);
@@ -1531,7 +1649,17 @@ function projectRetirementScenario(options) {
     coastTargetAtIntersection: coastTargetAtIntersection,
     portfolioAtIntersection: portfolioAtIntersection,
     portfolioAtTargetAgeNoWithdraw: portfolioNoWithdraw,
-    portfolioAtTargetAgeWithWithdraw: portfolioWithWithdraw
+    portfolioAtTargetAgeWithWithdraw: portfolioWithWithdraw,
+    fullFireAge: fullFireAge,
+    fullFireNumber: adjustedRetirementNeed,
+    yearlyProjection: buildProjectionSeries({
+      age: age,
+      targetAge: targetAge,
+      startPortfolio: startPortfolio + lumpSum,
+      annualContribution: annualContribution,
+      step: step,
+      returnRate: returnRate
+    })
   };
 }
 
@@ -1697,6 +1825,61 @@ function renderProjector() {
   computeProjector();
 }
 
+function renderProjectionChart(series) {
+  const node = el('pjYearlyChart');
+  if (!node) {
+    return;
+  }
+
+  if (charts['pjYearlyChart']) {
+    try {
+      charts['pjYearlyChart'].destroy();
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  const labels = Array.isArray(series && series.labels) ? series.labels : [];
+  const deposited = Array.isArray(series && series.deposited) ? series.deposited : [];
+  const returns = Array.isArray(series && series.returns) ? series.returns : [];
+
+  if (!labels.length) {
+    return;
+  }
+
+  charts['pjYearlyChart'] = new Chart(node, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Deposited',
+          data: deposited,
+          backgroundColor: '#0e7d8b',
+          borderRadius: 6
+        },
+        {
+          label: 'Returns',
+          data: returns,
+          backgroundColor: '#17c3b2',
+          borderRadius: 6
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, ticks: { maxRotation: 0 } },
+        y: { stacked: true, beginAtZero: true }
+      },
+      plugins: {
+        legend: { display: true }
+      }
+    }
+  });
+}
+
 function computeProjector() {
   const age = num((el('pjAge') || {}).value, 25);
   const retireAge = num((el('pjRetire') || {}).value, 55);
@@ -1766,22 +1949,21 @@ function computeProjector() {
   });
   const requiredSpendingReductionPct = spending > 0 ? (requiredSpendingReduction / spending) * 100 : 0;
   const canReachTargetCoastAge = scenario.coastAge != null && scenario.coastAge <= targetCoastAge;
-  const projectedCoastAge = scenario.coastAge != null ? scenario.coastAge : ('>' + targetCoastAge);
-  const coastStatus = canReachTargetCoastAge ? ('You can reach Full FIRE by age ' + targetCoastAge + '.') : ('Your current plan would not reach Full FIRE by age ' + targetCoastAge + '.');
+  const coastStatus = canReachTargetCoastAge ? ('You can reach Coast FI by age ' + targetCoastAge + '.') : ('Your current plan would not reach Coast FI by age ' + targetCoastAge + '.');
 
   setText('pjResultTitle', coastStatus);
   setText('pjResultCopy', useIncomeBucket
     ? ('With your income coverage target of ' + pct(coverageTarget * 100) + ', the annual spending target becomes ' + peso(scenario.effectiveAnnualSpending) + ' and your coast target grows over time until it reaches full FIRE at your retirement age.')
     : ('Turn on Income-Fi to lower the spending target used in the calculator and see how the coast target changes over time.'));
   setText('pjRetireAgeValue', retireAge);
-  setText('pjFullFireValue', peso(scenario.fullRetirementNeed));
+  setText('pjFullFireValue', peso(scenario.fullFireNumber));
   setText('pjAdjustedSpendingValue', peso(scenario.effectiveAnnualSpending));
   setText('pjNoWithdrawValue', peso(scenario.portfolioAtTargetAgeNoWithdraw));
   setText('pjWithdrawValue', peso(scenario.portfolioAtTargetAgeWithWithdraw));
-  setText('pjCoastAgeValue', projectedCoastAge);
-  setText('pjCoastIntersectionValue', scenario.coastAge != null ? ('Age ' + scenario.coastAge) : 'Not yet');
+  setText('pjCoastAgeValue', scenario.coastAge != null ? ('Age ' + scenario.coastAge) : 'Not yet');
   setText('pjCoastTargetValue', scenario.coastTargetAtIntersection != null ? peso(scenario.coastTargetAtIntersection) : '—');
-  setText('pjPortfolioAtCoastValue', scenario.portfolioAtIntersection != null ? peso(scenario.portfolioAtIntersection) : '—');
+  setText('pjFullFireAgeValue', scenario.fullFireAge != null ? ('Age ' + scenario.fullFireAge) : ('>' + retireAge));
+  renderProjectionChart(scenario.yearlyProjection);
   setText('pjSolveMonthlyValue', extraMonthly >= 1000000 ? '₱1M+/mo' : (peso(extraMonthly) + '/mo'));
   setText('pjSolveLumpValue', peso(requiredLumpSum));
   setText('pjSolveSpendValue', requiredSpendingReduction > 0 ? (peso(requiredSpendingReduction) + '/yr') : 'None');
