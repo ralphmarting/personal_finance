@@ -223,110 +223,103 @@
         <div class="cardhead" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px">
           <div>
             <h3 style="margin:0">Coast Projector</h3>
-            <p class="note" style="margin:6px 0 0">Trace the path to coast FI, full FIRE, and the levers that can move
-              you there sooner.</p>
+            <p class="note" style="margin:6px 0 0">One cohesive Coast FI model: profile settings drive contributions, bucket returns, expense reduction, graph, and metrics.</p>
           </div>
         </div>
-        <div class="grid cols-3">
-          <div class="field"><label>Current age</label><input id="pjAge" type="number"></div>
-          <div class="field"><label>Retire age</label><input id="pjRetire" type="number"></div>
-          <div class="field"><label>Target coast age</label><input id="pjTargetCoast" type="number"></div>
-          <div class="field"><label>Monthly contribution</label><input id="pjMonthly" type="number"></div>
-          <div class="field"><label>Annual step-up (%)</label><input id="pjStep" type="number"></div>
-          <div class="field"><label>Real return (%)</label><input id="pjReturn" type="number"></div>
-          <div class="field"><label>Annual spending</label><input id="pjSpend" type="number"></div>
-          <div class="field"><label>Withdrawal multiple</label><select id="pjMult">
-              <option value="25">25x</option>
-              <option value="30">30x</option>
-            </select></div>
-          <div class="field"><label>Current portfolio</label><input id="pjPort" type="number"></div>
-          <div class="field" style="grid-column:1 / -1">
-            <div class="cardhead compact-top" style="justify-content:flex-start;gap:12px">
-              <span style="font-weight:600;color:var(--ink)">Lower the annual spending target with income
-                coverage</span>
-              <label class="switch"><input type="checkbox" id="pjIncludeIncome"><span class="slider"></span></label>
+        <div class="projector-input-shell">
+          <div class="projector-input-card">
+            <h4>1. Profile timeline</h4>
+            <div class="grid">
+              <div class="field"><label>Current age</label><input id="pjAge" type="number"></div>
+              <div class="field"><label>Retire age</label><input id="pjRetire" type="number"></div>
+              <div class="field"><label>Target coast age</label><input id="pjTargetCoast" type="number"></div>
             </div>
-            <div class="field" style="margin-top:10px">
-              <label for="pjIncomePct">Income-Fi coverage (% of spending)</label>
-              <input id="pjIncomePct" type="range" min="0" max="100" step="1" value="50">
-              <div class="cardhead compact-top" style="justify-content:space-between;align-items:center">
-                <span id="pjIncomePctValue" class="note">50%</span>
-                <span class="note">This lowers the annual spending target used in the model.</span>
+          </div>
+          <div class="projector-input-card">
+            <h4>2. Contribution engine</h4>
+            <p class="note">Monthly contribution follows Settings &gt; Default Distribution Profile. Annual step-up increases the monthly contribution every year.</p>
+            <div class="grid">
+              <div class="field"><label>Monthly contribution</label><input id="pjMonthly" type="number"></div>
+              <div class="field"><label>Annual step-up (%)</label><input id="pjStep" type="number"></div>
+              <div class="field"><label>Blended real return (%)</label><input id="pjReturn" type="number"></div>
+            </div>
+          </div>
+          <div class="projector-input-card">
+            <h4>3. Starting portfolio</h4>
+            <div class="source-toggle">
+              <label><input type="radio" name="pjPortfolioSource" value="auto" checked> Use portfolio buckets</label>
+              <label><input type="radio" name="pjPortfolioSource" value="manual"> Input specific value</label>
+            </div>
+            <div id="pjBucketList" class="bucket-list"></div>
+            <div class="field"><label>Current portfolio</label><input id="pjPort" type="number"></div>
+            <p id="pjBucketStory" class="note"></p>
+          </div>
+          <div class="projector-input-card">
+            <h4>4. Expense target</h4>
+            <div class="grid">
+              <div class="field"><label>Annual spending</label><input id="pjSpend" type="number"></div>
+              <div class="field"><label>Withdrawal multiple</label><select id="pjMult"><option value="25">25x</option><option value="30">30x</option></select></div>
+              <div class="field">
+                <label>Use income coverage as expense reducer</label>
+                <label class="switch"><input type="checkbox" id="pjIncludeIncome"><span class="slider"></span></label>
               </div>
+            </div>
+            <label for="pjIncomePct">Income-Fi coverage (% of spending)</label>
+            <input id="pjIncomePct" type="range" min="0" max="100" step="1" value="50">
+            <div class="cardhead compact-top" style="justify-content:space-between;align-items:center">
+              <span id="pjIncomePctValue" class="note">50%</span>
+              <span class="note">Income bucket is not starting capital here; it only reduces annual expense.</span>
             </div>
           </div>
         </div>
         <div id="pjResult" class="projector-shell" style="margin-top:12px">
           <div class="projector-hero">
-            <div class="projector-kicker">🧭 Retirement path</div>
-            <div id="pjResultTitle" class="projector-title">Start with your profile defaults and adjust the levers.
-            </div>
-            <p id="pjResultCopy" class="projector-copy">The planner will show when your portfolio reaches coast FI, how
-              that target changes over time, and what it takes to reach your target coast age.</p>
+            <div class="projector-kicker">🧭 Coast FI story</div>
+            <div id="pjResultTitle" class="projector-title">Start with your profile defaults and adjust the levers.</div>
+            <p id="pjResultCopy" class="projector-copy">The same engine powers the graph and all output metrics.</p>
             <div class="projector-chart-panel">
               <div class="cardhead compact-top" style="margin-bottom:8px">
                 <div>
-                  <div class="label">Growth + Stability path</div>
-                  <div class="note">Year-by-year cumulative deposits and returns from your current Growth + Stability plan.</div>
+                  <div class="label">Deposits + gains vs Coast FI target</div>
+                  <div id="pjChartSub" class="note">Stacked area shows how starting capital, deposits, and unrealized gains build portfolio value.</div>
                 </div>
+                <div class="projector-start-pill">Start: <b id="pjStartPortfolioValue">—</b></div>
               </div>
               <div class="chartwrap"><canvas id="pjYearlyChart"></canvas></div>
             </div>
             <div class="projector-metrics">
-              <div class="projector-metric">
-                <div class="label">Age when coast FI number is reached</div>
-                <div id="pjCoastAgeValue" class="value">—</div>
-              </div>
-              <div class="projector-metric">
-                <div class="label">Coast FI number at that age</div>
-                <div id="pjCoastTargetValue" class="value">—</div>
-              </div>
+              <div class="projector-metric"><div class="label">Coast FI age</div><div id="pjCoastAgeValue" class="value">—</div></div>
+              <div class="projector-metric"><div class="label">Coast FI number at crossing</div><div id="pjCoastTargetValue" class="value">—</div></div>
+              <div class="projector-metric"><div class="label">Adjusted annual spending</div><div id="pjAdjustedSpendingValue" class="value">—</div></div>
+            </div>
+            <div class="projector-metrics">
+              <div class="projector-metric"><div class="label">Accumulated deposits at Coast FI</div><div id="pjCrossDepositValue" class="value">—</div></div>
+              <div class="projector-metric"><div class="label">Accumulated unrealized gains at Coast FI</div><div id="pjCrossGainValue" class="value">—</div></div>
+              <div class="projector-metric"><div class="label">Portfolio value at Coast FI</div><div id="pjCrossPortfolioValue" class="value">—</div></div>
             </div>
             <div class="projector-metrics">
               <div class="projector-metric projector-metric-wide">
                 <div class="label">Levers to hit target coast age</div>
                 <div class="projector-levers">
-                  <div>
-                    <span class="projector-mini-label">Increase monthly</span>
-                    <div id="pjSolveMonthlyValue" class="value">—</div>
-                  </div>
-                  <div>
-                    <span class="projector-mini-label">One-time lump sum</span>
-                    <div id="pjSolveLumpValue" class="value">—</div>
-                  </div>
-                  <div>
-                    <span class="projector-mini-label">Annual expense reduction</span>
-                    <div id="pjSolveSpendValue" class="value">—</div>
-                  </div>
+                  <div><span class="projector-mini-label">Increase monthly</span><div id="pjSolveMonthlyValue" class="value">—</div><p id="pjSolveMonthlyHint" class="hint"></p></div>
+                  <div><span class="projector-mini-label">One-time lump sum</span><div id="pjSolveLumpValue" class="value">—</div><p id="pjSolveLumpHint" class="hint"></p></div>
+                  <div><span class="projector-mini-label">Annual expense reduction</span><div id="pjSolveSpendValue" class="value">—</div><p id="pjSolveSpendHint" class="hint"></p></div>
                 </div>
               </div>
             </div>
             <hr>
             <div class="projector-metrics">
-              <div class="projector-metric">
-                <div class="label">Full FIRE age</div>
-                <div id="pjFullFireAgeValue" class="value">—</div>
-              </div>
-              <div class="projector-metric">
-                <div class="label">Full FIRE number</div>
-                <div id="pjFullFireValue" class="value">—</div>
-              </div>
+              <div class="projector-metric"><div class="label">Full FIRE age</div><div id="pjFullFireAgeValue" class="value">—</div></div>
+              <div class="projector-metric"><div class="label">Full FIRE number</div><div id="pjFullFireValue" class="value">—</div></div>
+              <div class="projector-metric"><div class="label">Retire age</div><div id="pjRetireAgeValue" class="value">—</div></div>
             </div>
             <div class="projector-metrics">
-              <div class="projector-metric">
-                <div class="label">Balance at retire age (with withdrawals)</div>
-                <div id="pjWithdrawValue" class="value">—</div>
-              </div>
-              <div class="projector-metric">
-                <div class="label">Balance at retire age (no withdrawals)</div>
-                <div id="pjNoWithdrawValue" class="value">—</div>
-              </div>
+              <div class="projector-metric"><div class="label">Balance at retire age (with withdrawals)</div><div id="pjWithdrawValue" class="value">—</div></div>
+              <div class="projector-metric"><div class="label">Balance at retire age (no withdrawals)</div><div id="pjNoWithdrawValue" class="value">—</div></div>
             </div>
-            <p class="projector-footnote">Changes update instantly as you adjust the inputs.</p>
+            <p id="pjResultFootnote" class="projector-footnote">Changes update instantly as you adjust the inputs.</p>
           </div>
         </div>
-        <p class="note">Retirement math uses Growth + Stability buckets only. The Income-Fi toggle reduces the annual
-          spending target used in the model.</p>
       </div>
     </section>
 
@@ -334,38 +327,48 @@
     <section id="tab-data" class="tab">
       <div class="card">
         <h3>Profile &amp; Goals</h3>
-        <div class="grid cols-3">
-          <div class="field"><label>Current age</label><input id="pfAge"></div>
-          <div class="field"><label>Retire age</label><input id="pfRetire"></div>
-          <div class="field"><label>Annual spending (₱)</label><input id="pfSpend"></div>
-          <div class="field"><label>Monthly contribution (₱)</label><input id="pfMonthly"></div>
-          <div class="field"><label>Annual step-up (%)</label><input id="pfStep"></div>
-          <div class="field"><label>Income coverage target (% of spending)</label><input id="pfIncomePct"><button
-              class="btn alt" style="margin-top:6px" onclick="setTargetFromExpense('divTarget')">Preview in
-              Planner</button></div>
-          <div class="field"><label>Default net yield (%)</label><input id="pfNetYield"></div>
-          <div class="field"><label>Domestic dividend tax (%)</label><input id="pfDivTax"></div>
-          <div class="field"><label>FX rate (USD→PHP)</label><input id="pfFx"></div>
-          <div class="field"><label>Withdrawal multiple</label><input id="pfMult"></div>
-          <div class="field"><label>Real return mode</label><select id="pfReturnMode">
-              <option value="auto">auto</option>
-              <option value="manual">manual</option>
-            </select></div>
-          <div class="field"><label>Manual real return (%)</label><input id="pfReturnManual"></div>
-          <div class="field"><label>Growth bucket return (%)</label><input id="pfRetGrowth"></div>
-          <div class="field"><label>Income bucket return (%)</label><input id="pfRetIncome"></div>
-          <div class="field"><label>Stability bucket return (%)</label><input id="pfRetStability"></div>
+        <div class="settings-group">
+          <h4>Timeline & spending</h4>
+          <div class="grid cols-3">
+            <div class="field"><label>Current age</label><input id="pfAge"></div>
+            <div class="field"><label>Retire age</label><input id="pfRetire"></div>
+            <div class="field"><label>Annual spending (₱)</label><input id="pfSpend"></div>
+            <div class="field"><label>Withdrawal multiple</label><input id="pfMult"></div>
+            <div class="field"><label>Income coverage target (% of spending)</label><input id="pfIncomePct"><button class="btn alt" style="margin-top:6px" onclick="setTargetFromExpense('divTarget')">Preview in Planner</button></div>
+          </div>
         </div>
-        <p class="note">Auto mode uses Growth + Stability bucket returns and the Growth/Stability default distribution
-          weights for coast math.</p>
-
-        <h4 class="section-mini">Default Distribution Profile</h4>
-        <div class="grid cols-3">
-          <div class="field"><label>Growth %</label><input id="pfDefGrowth"></div>
-          <div class="field"><label>Income %</label><input id="pfDefIncome"></div>
-          <div class="field"><label>Stability %</label><input id="pfDefStability"></div>
+        <div class="settings-group">
+          <h4>Contribution profile</h4>
+          <p class="note">Bucket percentages define how much of the monthly contribution is counted by bucket. Coast Projector selected buckets use their own share only.</p>
+          <div class="grid cols-3">
+            <div class="field"><label>Monthly contribution (₱)</label><input id="pfMonthly"></div>
+            <div class="field"><label>Annual step-up (%)</label><input id="pfStep"></div>
+            <div class="field"><label>Growth %</label><input id="pfDefGrowth"></div>
+            <div class="field"><label>Income %</label><input id="pfDefIncome"></div>
+            <div class="field"><label>Stability %</label><input id="pfDefStability"></div>
+            <div class="field"><label>Insurance %</label><input id="pfDefInsurance"></div>
+          </div>
         </div>
-
+        <div class="settings-group">
+          <h4>Return assumptions</h4>
+          <div class="grid cols-3">
+            <div class="field"><label>Real return mode</label><select id="pfReturnMode"><option value="auto">auto</option><option value="manual">manual</option></select></div>
+            <div class="field"><label>Manual real return (%)</label><input id="pfReturnManual"></div>
+            <div class="field"><label>Growth bucket return (%)</label><input id="pfRetGrowth"></div>
+            <div class="field"><label>Income bucket return (%)</label><input id="pfRetIncome"></div>
+            <div class="field"><label>Stability bucket return (%)</label><input id="pfRetStability"></div>
+            <div class="field"><label>Insurance bucket return (%)</label><input id="pfRetInsurance"></div>
+          </div>
+          <p class="note">Auto mode blends selected bucket returns. Income return is retained for profile completeness but Income is not Coast Projector starting capital.</p>
+        </div>
+        <div class="settings-group">
+          <h4>Income & market data</h4>
+          <div class="grid cols-3">
+            <div class="field"><label>Default net yield (%)</label><input id="pfNetYield"></div>
+            <div class="field"><label>Domestic dividend tax (%)</label><input id="pfDivTax"></div>
+            <div class="field"><label>FX rate (USD→PHP)</label><input id="pfFx"></div>
+          </div>
+        </div>
         <button class="btn" onclick="saveProfile()">Save Profile</button>
       </div>
 
@@ -432,48 +435,257 @@
     </section>
 
     <!-- HELP -->
-    <section id="tab-help" class="tab">
-      <div class="card help">
-        <h3>&#128075; Welcome</h3>
-        <p>This dashboard tracks portfolio progress, income coverage, allocation, and long-term planning using data
-          stored in your browser.</p>
+     <section id="tab-help" class="tab">
+        <div class="card help">
 
-        <h3>🛠 Wealth Builder Best Practices</h3>
-        <ol>
-          <li>Keep prices and dividends reasonably current.</li>
-          <li>Export a backup regularly.</li>
-          <li>Review goals when contribution plans or spending assumptions change.</li>
-        </ol>
+            <h3>🚀 Welcome to Your Freedom Dashboard</h3>
 
-        <h3>&#9999;&#65039; Updating data</h3>
-        <ol>
-          <li>Open <b>Settings</b>.</li>
-          <li>Update holdings, prices, FX, or goal assumptions.</li>
-          <li>Save your profile to refresh dashboard metrics and tools.</li>
-        </ol>
+            <p>
+            This is not a stock tracker.
+            This is your command center for financial freedom.
+            </p>
 
-        <h3>🎯 Your Freedom Dashboard Explained</h3>
-        <ul>
-          <li><b>Coast FIRE Progress</b> tracks progress toward a capital level that could grow into the long-term
-            retirement target without additional contributions.</li>
-          <li><b>Income Coverage</b> tracks portfolio dividend income relative to the configured coverage target, while
-            also showing annual income against total annual spending.</li>
-          <li><b>Total Invested</b> shows cumulative capital contributed.</li>
-          <li><b>Allocation charts</b> show how portfolio value is distributed by bucket and by holding.</li>
-        </ul>
+            <p>
+            Every peso deployed today is a future employee working for you.
+            The goal is simple:
+            build assets that eventually buy back your time.
+            </p>
 
-        <h3>&#128181; Income notes</h3>
-        <p>Income views focus on spendable dividends after tax. Auto-reinvested products can remain in the portfolio but
-          are not counted in income calculations.</p>
+            <hr>
 
-        <h3>&#128190; Backups</h3>
-        <p>Use <b>Export JSON</b> before major edits. To restore data on another device, open the dashboard and use
-          <b>Import JSON</b>.</p>
+            <h3>🎯 The Mission</h3>
 
-        <h3>&#128274; Privacy</h3>
-        <p>Data stays in this browser unless you export it yourself. This dashboard is for personal planning and record
-          keeping.</p>
-      </div>
+            <p>
+            The dashboard is built around a long-term freedom strategy:
+            </p>
+
+            <ul>
+            <li><b>Growth Bucket</b> → builds long-term wealth and drives Coast FIRE.</li>
+            <li><b>Income Bucket</b> → generates cash flow that reduces future expenses.</li>
+            <li><b>Stability Bucket</b> → protects capital and funds family goals such as education.</li>
+            <li><b>Insurance Bucket</b> → optional, illiquid assets that can be included when desired.</li>
+            </ul>
+
+            <p>
+            The objective is not simply becoming wealthy.
+            The objective is becoming free.
+            </p>
+
+            <hr>
+
+            <h3>🏝 Understanding Coast FIRE</h3>
+
+            <p>
+            Coast FIRE means reaching a portfolio level that can grow into your future retirement target
+            even if you stop making additional contributions.
+            </p>
+
+            <p>
+            In this dashboard:
+            </p>
+
+            <ul>
+            <li>Growth assets count toward Coast FIRE.</li>
+            <li>Stability assets count toward Coast FIRE.</li>
+            <li>Income assets do <b>not</b> count as Coast FIRE capital.</li>
+            <li>Income assets instead reduce the expenses your portfolio must fund.</li>
+            <li>Insurance assets can optionally be included when modeled.</li>
+            </ul>
+
+            <p>
+            Coast FIRE is where work starts becoming optional.
+            Full FIRE is where work becomes a choice.
+            </p>
+
+            <hr>
+
+            <h3>📊 Reading the Dashboard</h3>
+
+            <ul>
+            <li>
+                <b>Wealth Capacity Now</b><br>
+                Shows how much of your annual spending is currently supported by
+                your assets and income streams.
+            </li>
+
+            <li>
+                <b>Full FIRE End Goal</b><br>
+                Tracks progress toward your long-term independence target.
+            </li>
+
+            <li>
+                <b>Option to Slow Down</b><br>
+                Estimates when your current path reaches Coast FIRE.
+            </li>
+
+            <li>
+                <b>Income-FI Progress</b><br>
+                Tracks progress toward your target income coverage percentage.
+            </li>
+
+            <li>
+                <b>Allocation Charts</b><br>
+                Reveal where your capital is deployed and whether it aligns with
+                your strategy.
+            </li>
+            </ul>
+
+            <hr>
+
+            <h3>🧭 Coast Projector Explained</h3>
+
+            <p>
+            The Coast Projector is the planning engine of the entire dashboard.
+            </p>
+
+            <p>
+            It uses the same assumptions shown elsewhere in the application:
+            </p>
+
+            <ul>
+            <li>Current portfolio value</li>
+            <li>Bucket return assumptions</li>
+            <li>Monthly contributions</li>
+            <li>Annual contribution step-ups</li>
+            <li>Income coverage goals</li>
+            <li>Retirement spending targets</li>
+            </ul>
+
+            <p>
+            The graph is the source of truth.
+            All outputs beneath the graph are generated from the exact same model.
+            </p>
+
+            <p>
+            The stacked chart tells the full wealth-building story:
+            </p>
+
+            <ul>
+            <li>Starting Portfolio</li>
+            <li>+ Accumulated Deposits</li>
+            <li>+ Unrealized Gains</li>
+            <li>= Portfolio Value</li>
+            </ul>
+
+            <p>
+            The dashed line represents your Coast FIRE target.
+            </p>
+
+            <p>
+            When the portfolio line crosses that target,
+            you have achieved Coast FIRE under the selected assumptions.
+            </p>
+
+            <hr>
+
+            <h3>⚙️ Contribution Profiles</h3>
+
+            <p>
+            Your Default Distribution Profile defines where each monthly contribution goes.
+            </p>
+
+            <p>
+            Example:
+            </p>
+
+            <ul>
+            <li>Growth = 70%</li>
+            <li>Income = 20%</li>
+            <li>Stability = 10%</li>
+            </ul>
+
+            <p>
+            If the Coast Projector is configured to use only Growth,
+            only the Growth portion of future contributions will be counted.
+            </p>
+
+            <p>
+            The selected buckets determine:
+            </p>
+
+            <ul>
+            <li>Starting portfolio used by the model</li>
+            <li>Contribution share used by the model</li>
+            <li>Blended return assumptions used by the model</li>
+            </ul>
+
+            <hr>
+
+            <h3>💵 Income-FI Philosophy</h3>
+
+            <p>
+            Income is not just cash flow.
+            Income is freedom purchased in advance.
+            </p>
+
+            <p>
+            Every peso generated by the Income Bucket is one less peso your
+            retirement portfolio must support.
+            </p>
+
+            <p>
+            Income coverage represents a future goal:
+            </p>
+
+            <ul>
+            <li>25% = portfolio contributes meaningfully</li>
+            <li>50% = lifestyle is partially self-funded</li>
+            <li>100% = work becomes completely optional</li>
+            </ul>
+
+            <hr>
+
+            <h3>🏆 The Real Scoreboard</h3>
+
+            <p>
+            Ignore short-term market noise.
+            </p>
+
+            <p>
+            Track the things that actually matter:
+            </p>
+
+            <ul>
+            <li>Consistency of contributions</li>
+            <li>Growth of invested capital</li>
+            <li>Growth of unrealized gains</li>
+            <li>Income coverage progress</li>
+            <li>Years to Coast FIRE</li>
+            </ul>
+
+            <p>
+            Freedom is rarely built through one brilliant decision.
+            Freedom is usually built through thousands of disciplined ones.
+            </p>
+
+            <hr>
+
+            <h3>💾 Backups</h3>
+
+            <ul>
+            <li>Export JSON before major changes.</li>
+            <li>Import JSON to restore data on another device.</li>
+            <li>New profile fields remain backward compatible with older exports.</li>
+            </ul>
+
+            <hr>
+
+            <h3>🛡️ Privacy</h3>
+
+            <p>
+            Your data stays in your browser unless you explicitly export it.
+            </p>
+
+            <p>
+            This dashboard exists to help you focus on the only number that matters:
+            how much freedom your assets can buy.
+            </p>
+
+            <p style="font-weight:700;font-size:1.05rem">
+            Keep investing. Keep compounding. Keep buying back your time. 🚀
+            </p>
+
+        </div>
     </section>
   </div>
 

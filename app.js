@@ -1,4 +1,4 @@
-﻿/* Portfolio Dashboard */
+/* Portfolio Dashboard */
 const APP_KEY = 'portfolioDataV4';
 let S = {};
 let charts = {};
@@ -258,17 +258,19 @@ function ensureDefaults() {
   profile.withdrawalMultiplier = num(profile.withdrawalMultiplier, 30);
   profile.realReturnMode = profile.realReturnMode || 'auto';
   profile.realReturnManual = num(profile.realReturnManual, 0.06);
-  profile.bucketReturns = profile.bucketReturns || { Growth: 0.07, Income: 0.045, Stability: 0.025 };
+  profile.bucketReturns = profile.bucketReturns || { Growth: 0.07, Income: 0.045, Stability: 0.025, Insurance: 0 };
   profile.bucketReturns = {
     Growth: num(profile.bucketReturns.Growth, 0.07),
     Income: num(profile.bucketReturns.Income, 0.045),
-    Stability: num(profile.bucketReturns.Stability, 0.025)
+    Stability: num(profile.bucketReturns.Stability, 0.025),
+    Insurance: num(profile.bucketReturns.Insurance, 0)
   };
-  profile.defaultDistribution = profile.defaultDistribution || { Growth: 70, Income: 20, Stability: 10 };
+  profile.defaultDistribution = profile.defaultDistribution || { Growth: 70, Income: 20, Stability: 10, Insurance: 0 };
   profile.defaultDistribution = {
     Growth: num(profile.defaultDistribution.Growth, 70),
     Income: num(profile.defaultDistribution.Income, 20),
-    Stability: num(profile.defaultDistribution.Stability, 10)
+    Stability: num(profile.defaultDistribution.Stability, 10),
+    Insurance: num(profile.defaultDistribution.Insurance, 0)
   };
 
   delete profile.includeMP2Income;
@@ -1452,13 +1454,18 @@ function loadDefaultDistribution() {
   toast('Loaded default distribution profile.');
 }
 
+
+
 function projectorIncludeIncomeBucket() {
   if (S.ui && typeof S.ui.projectorIncludeIncomeBucket === 'boolean') {
     return S.ui.projectorIncludeIncomeBucket;
   }
   return num(S.profile.incomeCoverageTargetPct, 0) > 0;
 }
-
+function normalizeCoverageRate(value) {
+  const numericValue = num(value, 0);
+  return numericValue > 1 ? numericValue / 100 : numericValue;
+}
 function getProjectorIncomePct() {
   const slider = el('pjIncomePct');
   if (slider) {
@@ -1466,352 +1473,356 @@ function getProjectorIncomePct() {
   }
   return num(S.profile.incomeCoverageTargetPct, 0);
 }
-
-function normalizeCoverageRate(value) {
-  const numericValue = num(value, 0);
-  return numericValue > 1 ? numericValue / 100 : numericValue;
-}
-
 function getProjectorTargetCoastAge() {
   const node = el('pjTargetCoast');
-  const currentAge = num(S.profile.currentAge, 25);
-  const retireAge = num(S.profile.retireAge, 55);
+  const currentAge = num((el('pjAge') || {}).value, num(S.profile.currentAge, 25));
+  const retireAge = num((el('pjRetire') || {}).value, num(S.profile.retireAge, 55));
   const fallback = Math.max(currentAge + 1, retireAge - 5);
   const value = num(node ? node.value : '', fallback);
   return clamp(value, currentAge, retireAge);
 }
-
-function computeCoastIntersection(params) {
-  const age = num(params.age, 25);
-  const targetAge = num(params.targetAge, 55);
-  const currentValue = num(params.currentValue, 0);
-  const annualContribution = num(params.annualContribution, 0);
-  const annualStepUp = num(params.annualStepUp, 0);
-  const returnRate = num(params.returnRate, 0);
-  const annualFireSpend = num(params.annualFireSpend, 0);
-
-  let projectedValue = currentValue;
-  let annualContributionValue = annualContribution;
-  let targetValue = annualFireSpend;
-  let yearsToTarget = null;
-
-  if (currentValue >= annualFireSpend && annualFireSpend > 0) {
-    yearsToTarget = 0;
-    targetValue = annualFireSpend;
-  } else if (currentValue >= 0 && returnRate >= 0) {
-    for (let year = age; year <= targetAge; year++) {
-      projectedValue = projectedValue * (1 + returnRate);
-      projectedValue += annualContributionValue;
-
-      const yearsToRetirementAtThisPoint = Math.max(targetAge - year, 0);
-      targetValue = yearsToRetirementAtThisPoint > 0
-        ? annualFireSpend / Math.pow(1 + returnRate, yearsToRetirementAtThisPoint)
-        : annualFireSpend;
-
-      if (projectedValue >= targetValue) {
-        yearsToTarget = year - age;
-        break;
-      }
-
-      annualContributionValue *= (1 + annualStepUp);
-    }
+function getBucketValue(bucket) {
+  return S.positions.reduce(function (sum, position) {
+    return position.bucket === bucket ? sum + valuePHP(position) : sum;
+  }, 0);
+}
+function getProjectorSelectedBuckets() {
+  const defaults = { Growth: true, Stability: true, Insurance: false };
+  return ['Growth', 'Stability', 'Insurance'].filter(function (bucket) {
+    const node = el('pjBucket' + bucket);
+    return node ? node.checked : !!defaults[bucket];
+  });
+}
+function getProjectorPortfolioSource() {
+  const source = (document.querySelector('input[name="pjPortfolioSource"]:checked') || {}).value;
+  return source || ((S.ui && S.ui.projectorPortfolioSource) || 'auto');
+}
+function getProjectorAutoPortfolioValue(buckets) {
+  return (buckets || getProjectorSelectedBuckets()).reduce(function (sum, bucket) {
+    return sum + getBucketValue(bucket);
+  }, 0);
+}
+function getProjectorStartingPortfolio() {
+  if (getProjectorPortfolioSource() === 'manual') {
+    return num((el('pjPort') || {}).value, 0);
   }
-
+  return getProjectorAutoPortfolioValue();
+}
+function getDistributionTotal() {
+  const d = S.profile.defaultDistribution || {};
+  return ['Growth', 'Income', 'Stability', 'Insurance'].reduce(function (sum, bucket) {
+    return sum + num(d[bucket], 0);
+  }, 0);
+}
+function getSelectedContributionShare(selectedBuckets) {
+  const d = S.profile.defaultDistribution || {};
+  const selected = selectedBuckets || getProjectorSelectedBuckets();
+  const total = getDistributionTotal();
+  const selectedTotal = selected.reduce(function (sum, bucket) {
+    return sum + num(d[bucket], 0);
+  }, 0);
+  return total ? selectedTotal / total : 0;
+}
+function getBucketContributionShares(selectedBuckets) {
+  const distribution = S.profile.defaultDistribution || { Growth: 70, Income: 20, Stability: 10, Insurance: 0 };
+  const selected = selectedBuckets || ['Growth', 'Stability'];
+  const total = selected.reduce(function (sum, bucket) {
+    return sum + num(distribution[bucket], 0);
+  }, 0);
+  const shares = {};
+  selected.forEach(function (bucket) {
+    shares[bucket] = total ? num(distribution[bucket], 0) / total : 0;
+  });
+  return shares;
+}
+function getBlendedReturnRate(selectedBuckets) {
+  if (S.profile.realReturnMode === 'manual') {
+    return num(S.profile.realReturnManual, 0.06);
+  }
+  const shares = getBucketContributionShares(selectedBuckets);
+  const bucketReturns = S.profile.bucketReturns || { Growth: 0.07, Income: 0.045, Stability: 0.025, Insurance: 0 };
+  let result = 0;
+  Object.keys(shares).forEach(function (bucket) {
+    result += shares[bucket] * num(bucketReturns[bucket], 0);
+  });
+  return result || realReturn();
+}
+function buildProjectorInputs() {
+  const selectedBuckets = getProjectorSelectedBuckets();
+  const startPortfolio = getProjectorStartingPortfolio();
+  const coverageTarget = normalizeCoverageRate(getProjectorIncomePct());
+  const useIncomeBucket = projectorIncludeIncomeBucket();
+  const monthlyContribution = num((el('pjMonthly') || {}).value, num(S.profile.monthlyContribution, 0));
+  const contributionShare = getSelectedContributionShare(selectedBuckets);
   return {
-    yearsToTarget: yearsToTarget,
-    projectedValue: projectedValue,
-    targetValue: targetValue
+    age: num((el('pjAge') || {}).value, num(S.profile.currentAge, 25)),
+    targetAge: num((el('pjRetire') || {}).value, num(S.profile.retireAge, 55)),
+    targetCoastAge: getProjectorTargetCoastAge(),
+    monthlyContribution: monthlyContribution,
+    annualContribution: monthlyContribution * 12 * contributionShare,
+    step: num((el('pjStep') || {}).value, 0) / 100,
+    returnRate: num((el('pjReturn') || {}).value, 6) / 100,
+    spending: num((el('pjSpend') || {}).value, 0),
+    withdrawalMultiple: num((el('pjMult') || {}).value, 30),
+    startPortfolio: startPortfolio,
+    selectedBuckets: selectedBuckets,
+    coverageTarget: coverageTarget,
+    useIncomeBucket: useIncomeBucket,
+    contributionShare: contributionShare
   };
 }
-
 function buildProjectionSeries(options) {
   const age = num(options.age, 25);
   const targetAge = num(options.targetAge, 55);
   const startPortfolio = num(options.startPortfolio, 0);
   const annualContribution = num(options.annualContribution, 0);
-  const step = num(options.step, 0) / 100;
+  const step = num(options.step, 0);
   const returnRate = num(options.returnRate, 0.06);
-  const labels = [];
-  const deposited = [];
-  const returns = [];
+  const annualFireSpend = num(options.annualFireSpend, 0);
+  const labels = [String(age)];
+  const portfolioValues = [startPortfolio];
+  const deposited = [startPortfolio];
+  const newDeposits = [0];
+  const gains = [0];
+  const coastTargets = [targetAge > age ? annualFireSpend / Math.pow(1 + returnRate, targetAge - age) : annualFireSpend];
   let portfolio = startPortfolio;
-  let cumulativeDeposits = 0;
-  let cumulativeReturns = 0;
+  let cumulativeNewDeposits = 0;
+  let cumulativeGains = 0;
   let contributionValue = annualContribution;
-
-  for (let year = age; year <= targetAge; year++) {
+  let coastAge = startPortfolio >= coastTargets[0] && annualFireSpend > 0 ? age : null;
+  let coastIndex = coastAge === age ? 0 : null;
+  let coastTargetAtIntersection = coastAge === age ? coastTargets[0] : null;
+  let portfolioAtIntersection = coastAge === age ? startPortfolio : null;
+  let depositsAtIntersection = coastAge === age ? 0 : null;
+  let gainsAtIntersection = coastAge === age ? 0 : null;
+  for (let year = age + 1; year <= targetAge; year++) {
     const annualReturn = portfolio * returnRate;
     portfolio += annualReturn + contributionValue;
-    cumulativeDeposits += contributionValue;
-    cumulativeReturns += annualReturn;
+    cumulativeGains += annualReturn;
+    cumulativeNewDeposits += contributionValue;
+    const yearsToRetirement = Math.max(targetAge - year, 0);
+    const target = yearsToRetirement > 0 ? annualFireSpend / Math.pow(1 + returnRate, yearsToRetirement) : annualFireSpend;
     labels.push(String(year));
-    deposited.push(cumulativeDeposits);
-    returns.push(cumulativeReturns);
+    portfolioValues.push(portfolio);
+    deposited.push(startPortfolio + cumulativeNewDeposits);
+    newDeposits.push(cumulativeNewDeposits);
+    gains.push(cumulativeGains);
+    coastTargets.push(target);
+    if (coastAge == null && portfolio >= target) {
+      coastAge = year;
+      coastIndex = labels.length - 1;
+      coastTargetAtIntersection = target;
+      portfolioAtIntersection = portfolio;
+      depositsAtIntersection = cumulativeNewDeposits;
+      gainsAtIntersection = cumulativeGains;
+    }
     contributionValue *= (1 + step);
   }
-
   return {
     labels: labels,
+    portfolioValues: portfolioValues,
     deposited: deposited,
-    returns: returns,
-    portfolio: portfolio
+    newDeposits: newDeposits,
+    gains: gains,
+    coastTargets: coastTargets,
+    portfolio: portfolio,
+    coastAge: coastAge,
+    coastIndex: coastIndex,
+    coastTargetAtIntersection: coastTargetAtIntersection,
+    portfolioAtIntersection: portfolioAtIntersection,
+    depositsAtIntersection: depositsAtIntersection,
+    gainsAtIntersection: gainsAtIntersection
   };
 }
-
 function projectRetirementScenario(options) {
-  const age = num(options.age, 25);
-  const targetAge = num(options.targetAge, 55);
-  const targetCoastAge = num(options.targetCoastAge, targetAge);
-  const monthlyContribution = num(options.monthlyContribution, 0);
-  const step = num(options.step, 0) / 100;
-  const returnRate = num(options.returnRate, 0.06);
-  const spending = num(options.spending, 0);
-  const startPortfolio = num(options.startPortfolio, 0);
-  const extraMonthly = num(options.extraMonthly, 0);
-  const lumpSum = num(options.lumpSum, 0);
-  const useIncomeBucket = !!options.useIncomeBucket;
-  const coverageTarget = normalizeCoverageRate(num(options.coverageTarget, 0));
-  const withdrawalMultiple = num(options.withdrawalMultiple, 30);
-  const spendingInputs = getCoastSpendingInputs({ spending: spending, useIncomeBucket: useIncomeBucket, coverageTarget: coverageTarget });
-  const fullAnnualSpending = spendingInputs.annualSpending;
-  const effectiveAnnualSpending = spendingInputs.effectiveAnnualSpending;
-  const fullRetirementNeed = fullAnnualSpending * withdrawalMultiple;
-  const adjustedRetirementNeed = effectiveAnnualSpending * withdrawalMultiple;
-  const coastContributionShare = getCoastContributionShare();
-  const annualContribution = (monthlyContribution + extraMonthly) * 12 * coastContributionShare;
-  const coastAnnualContribution = annualContribution;
-
-  let portfolioNoWithdraw = startPortfolio + lumpSum;
-  let coastPortfolioNoWithdraw = startPortfolio + lumpSum;
-  let annualContributionValue = annualContribution;
-  let coastAnnualContributionValue = coastAnnualContribution;
-  let coastAge = null;
-  let coastTargetAtIntersection = null;
-  let portfolioAtIntersection = null;
-
-  const intersection = computeCoastIntersection({
-    age: age,
-    targetAge: targetAge,
-    currentValue: coastPortfolioNoWithdraw,
-    annualContribution: coastAnnualContribution,
-    annualStepUp: step,
-    returnRate: returnRate,
+  const spendingInputs = getCoastSpendingInputs({
+    spending: options.spending,
+    useIncomeBucket: !!options.useIncomeBucket,
+    coverageTarget: normalizeCoverageRate(options.coverageTarget)
+  });
+  const fullRetirementNeed = spendingInputs.annualSpending * num(options.withdrawalMultiple, 30);
+  const adjustedRetirementNeed = spendingInputs.effectiveAnnualSpending * num(options.withdrawalMultiple, 30);
+  const annualContribution = (num(options.monthlyContribution, 0) + num(options.extraMonthly, 0)) * 12 * num(options.contributionShare, getSelectedContributionShare(options.selectedBuckets));
+  const startPortfolio = num(options.startPortfolio, 0) + num(options.lumpSum, 0);
+  const yearlyProjection = buildProjectionSeries({
+    age: options.age,
+    targetAge: options.targetAge,
+    startPortfolio: startPortfolio,
+    annualContribution: annualContribution,
+    step: options.step,
+    returnRate: options.returnRate,
     annualFireSpend: adjustedRetirementNeed
   });
-
-  if (intersection.yearsToTarget != null) {
-    coastAge = age + intersection.yearsToTarget;
-    coastTargetAtIntersection = intersection.targetValue;
-    portfolioAtIntersection = intersection.projectedValue;
-  }
-
-  for (let year = age; year <= targetAge; year++) {
-    portfolioNoWithdraw = portfolioNoWithdraw * (1 + returnRate) + annualContributionValue;
-    coastPortfolioNoWithdraw = coastPortfolioNoWithdraw * (1 + returnRate) + coastAnnualContributionValue;
-
-    annualContributionValue *= (1 + step);
-    coastAnnualContributionValue *= (1 + step);
-  }
-
-  let portfolioWithWithdraw = startPortfolio + lumpSum;
-  annualContributionValue = annualContribution;
+  let portfolioWithWithdraw = startPortfolio;
+  let contributionValue = annualContribution;
   let contributing = true;
-  const withdrawalSpending = effectiveAnnualSpending;
   let fullFireAge = null;
-
-  for (let year = age; year <= targetAge; year++) {
-    portfolioWithWithdraw = portfolioWithWithdraw * (1 + returnRate);
-
+  for (let year = num(options.age, 25) + 1; year <= num(options.targetAge, 55); year++) {
+    portfolioWithWithdraw *= (1 + num(options.returnRate, 0.06));
     if (contributing) {
-      portfolioWithWithdraw += annualContributionValue;
+      portfolioWithWithdraw += contributionValue;
     }
-
     if (fullFireAge == null && portfolioWithWithdraw >= adjustedRetirementNeed) {
       fullFireAge = year;
     }
-
     if (contributing && portfolioWithWithdraw >= adjustedRetirementNeed) {
       contributing = false;
     }
-
     if (!contributing) {
-      portfolioWithWithdraw -= withdrawalSpending;
+      portfolioWithWithdraw -= spendingInputs.effectiveAnnualSpending;
     }
-
-    annualContributionValue *= (1 + step);
+    contributionValue *= (1 + num(options.step, 0));
   }
-
   return {
     fullRetirementNeed: fullRetirementNeed,
     adjustedRetirementNeed: adjustedRetirementNeed,
-    effectiveAnnualSpending: effectiveAnnualSpending,
-    coastAge: coastAge,
-    coastTargetAtIntersection: coastTargetAtIntersection,
-    portfolioAtIntersection: portfolioAtIntersection,
-    portfolioAtTargetAgeNoWithdraw: portfolioNoWithdraw,
+    effectiveAnnualSpending: spendingInputs.effectiveAnnualSpending,
+    coastAge: yearlyProjection.coastAge,
+    coastTargetAtIntersection: yearlyProjection.coastTargetAtIntersection,
+    portfolioAtIntersection: yearlyProjection.portfolioAtIntersection,
+    depositsAtIntersection: yearlyProjection.depositsAtIntersection,
+    gainsAtIntersection: yearlyProjection.gainsAtIntersection,
+    portfolioAtTargetAgeNoWithdraw: yearlyProjection.portfolio,
     portfolioAtTargetAgeWithWithdraw: portfolioWithWithdraw,
     fullFireAge: fullFireAge,
     fullFireNumber: adjustedRetirementNeed,
-    yearlyProjection: buildProjectionSeries({
-      age: age,
-      targetAge: targetAge,
-      startPortfolio: startPortfolio + lumpSum,
-      annualContribution: annualContribution,
-      step: step,
-      returnRate: returnRate
-    })
+    yearlyProjection: yearlyProjection
   };
 }
-
 function solveExtraMonthlyContribution(options) {
   const targetCoastAge = num(options.targetCoastAge, num(options.targetAge, 55));
-  const baseOptions = Object.assign({}, options, { targetCoastAge: targetCoastAge, extraMonthly: 0 });
+  const baseOptions = Object.assign({}, options, { extraMonthly: 0 });
   const baseScenario = projectRetirementScenario(baseOptions);
-  if (baseScenario.coastAge != null && baseScenario.coastAge <= targetCoastAge) {
-    return 0;
-  }
-
-  let low = 0;
-  let high = 1000000;
-  let result = high;
-
+  if (baseScenario.coastAge != null && baseScenario.coastAge <= targetCoastAge) return 0;
+  let low = 0, high = 1000000, result = high;
   for (let i = 0; i < 30; i++) {
     const mid = (low + high) / 2;
     const scenario = projectRetirementScenario(Object.assign({}, baseOptions, { extraMonthly: mid }));
-    if (scenario.coastAge != null && scenario.coastAge <= targetCoastAge) {
-      result = mid;
-      high = mid;
-    } else {
-      low = mid;
-    }
+    if (scenario.coastAge != null && scenario.coastAge <= targetCoastAge) { result = mid; high = mid; } else { low = mid; }
   }
-
   return result;
 }
-
 function solveRequiredLumpSum(options) {
   const targetCoastAge = num(options.targetCoastAge, num(options.targetAge, 55));
-  const baseOptions = Object.assign({}, options, { targetCoastAge: targetCoastAge, lumpSum: 0 });
+  const baseOptions = Object.assign({}, options, { lumpSum: 0 });
   const baseScenario = projectRetirementScenario(baseOptions);
-  if (baseScenario.coastAge != null && baseScenario.coastAge <= targetCoastAge) {
-    return 0;
-  }
-
-  let low = 0;
-  let high = 100000000;
-  let result = high;
-
+  if (baseScenario.coastAge != null && baseScenario.coastAge <= targetCoastAge) return 0;
+  let low = 0, high = 100000000, result = high;
   for (let i = 0; i < 30; i++) {
     const mid = (low + high) / 2;
     const scenario = projectRetirementScenario(Object.assign({}, baseOptions, { lumpSum: mid }));
-    if (scenario.coastAge != null && scenario.coastAge <= targetCoastAge) {
-      result = mid;
-      high = mid;
-    } else {
-      low = mid;
-    }
+    if (scenario.coastAge != null && scenario.coastAge <= targetCoastAge) { result = mid; high = mid; } else { low = mid; }
   }
-
   return result;
 }
-
 function solveRequiredSpendingReduction(options) {
   const targetCoastAge = num(options.targetCoastAge, num(options.targetAge, 55));
   const spending = num(options.spending, 0);
-  if (spending <= 0) {
-    return 0;
-  }
-
-  const baseOptions = Object.assign({}, options, { targetCoastAge: targetCoastAge, spending: spending });
+  if (spending <= 0) return 0;
+  const baseOptions = Object.assign({}, options, { spending: spending });
   const baseScenario = projectRetirementScenario(baseOptions);
-  if (baseScenario.coastAge != null && baseScenario.coastAge <= targetCoastAge) {
-    return 0;
-  }
-
-  let low = 0;
-  let high = spending;
-  let result = high;
-
+  if (baseScenario.coastAge != null && baseScenario.coastAge <= targetCoastAge) return 0;
+  let low = 0, high = spending, result = high;
   for (let i = 0; i < 30; i++) {
     const mid = (low + high) / 2;
     const scenario = projectRetirementScenario(Object.assign({}, baseOptions, { spending: Math.max(spending - mid, 0) }));
-    if (scenario.coastAge != null && scenario.coastAge <= targetCoastAge) {
-      result = mid;
-      high = mid;
-    } else {
-      low = mid;
-    }
+    if (scenario.coastAge != null && scenario.coastAge <= targetCoastAge) { result = mid; high = mid; } else { low = mid; }
   }
-
   return result;
 }
-
+function renderProjectorBucketPicker() {
+  const list = el('pjBucketList');
+  if (!list) return;
+  const rows = ['Growth', 'Stability', 'Insurance'].map(function (bucket) {
+    const value = getBucketValue(bucket);
+    const checked = bucket === 'Growth' || bucket === 'Stability' ? ' checked' : '';
+    const returnRate = num((S.profile.bucketReturns || {})[bucket], 0) * 100;
+    const dist = num((S.profile.defaultDistribution || {})[bucket], 0);
+    const note = (bucket === 'Insurance' ? 'illiquid optional · ' : '') + dist.toFixed(0) + '% of monthly contribution · ' + returnRate.toFixed(1) + '% return';
+    return '<label class="bucket-check"><input id="pjBucket' + bucket + '" type="checkbox" value="' + bucket + '"' + checked + '> <span>' + bucket + '</span><b>' + peso(value) + '</b><em>' + note + '</em></label>';
+  });
+  list.innerHTML = rows.join('') + '<div class="bucket-check disabled"><span>Income</span><b>Expense reducer only</b><em>' + num((S.profile.defaultDistribution || {}).Income, 0).toFixed(0) + '% of monthly contribution, excluded from Coast capital</em></div>';
+}
+function updateProjectorReturnFromBuckets(force) {
+  const node = el('pjReturn');
+  if (!node) return;
+  if (force || S.profile.realReturnMode === 'auto') {
+    node.value = (getBlendedReturnRate(getProjectorSelectedBuckets()) * 100).toFixed(2);
+  }
+}
+function syncProjectorPortfolioInput() {
+  const source = getProjectorPortfolioSource();
+  const port = el('pjPort');
+  if (!port) return;
+  const isAuto = source === 'auto';
+  port.readOnly = isAuto;
+  port.classList.toggle('readonly', isAuto);
+  if (isAuto) {
+    port.value = Math.round(getProjectorAutoPortfolioValue());
+  }
+  setText('pjStartPortfolioValue', peso(num(port.value, 0)));
+  const buckets = getProjectorSelectedBuckets();
+  const annualContribution = num((el('pjMonthly') || {}).value, 0) * 12 * getSelectedContributionShare(buckets);
+  setText('pjBucketStory', isAuto ? ('Using ' + (buckets.length ? buckets.join(' + ') : 'no selected bucket') + '. Annual contribution counted: ' + peso(annualContribution) + '.') : 'Using your manual portfolio value.');
+}
 function renderProjector() {
   const profile = S.profile || {};
   function setValue(id, value) {
     const node = el(id);
-    if (node) {
-      const currentValue = node.type === 'number' ? num(node.value, '') : node.value;
-      if (currentValue === '' || String(currentValue) !== String(value)) {
-        node.value = value;
-      }
+    if (node && (node.value === '' || node.dataset.projectorInitialized !== '1')) {
+      node.value = value;
+      node.dataset.projectorInitialized = '1';
     }
   }
-
   function setSelect(id, value) {
     const node = el(id);
-    if (node) {
-      node.value = String(value);
-    }
+    if (node) node.value = String(value);
   }
-
   setValue('pjAge', profile.currentAge);
   setValue('pjRetire', profile.retireAge);
   setValue('pjMonthly', profile.monthlyContribution);
   setValue('pjStep', (profile.contribStepUp * 100).toFixed(1));
-  setValue('pjReturn', (realReturn() * 100).toFixed(2));
+  setValue('pjReturn', (getBlendedReturnRate(['Growth', 'Stability']) * 100).toFixed(2));
   setValue('pjSpend', profile.annualSpending);
-  setValue('pjPort', Math.round(coastEligibleValue()));
   setValue('pjTargetCoast', Math.max(num(profile.currentAge, 25) + 1, num(profile.retireAge, 55) - 5));
   setSelect('pjMult', profile.withdrawalMultiplier);
-
+  renderProjectorBucketPicker();
+  const source = (S.ui && S.ui.projectorPortfolioSource) || 'auto';
+  const radio = document.querySelector('input[name="pjPortfolioSource"][value="' + source + '"]');
+  if (radio) radio.checked = true;
   const incomeToggle = el('pjIncludeIncome');
-  if (incomeToggle) {
-    incomeToggle.checked = projectorIncludeIncomeBucket();
-  }
-
+  if (incomeToggle) incomeToggle.checked = projectorIncludeIncomeBucket();
   const incomeSlider = el('pjIncomePct');
   if (incomeSlider) {
     const sliderValue = clamp(num(profile.incomeCoverageTargetPct, 50), 0, 100);
     incomeSlider.value = sliderValue;
-    const valueNode = el('pjIncomePctValue');
-    if (valueNode) {
-      valueNode.textContent = sliderValue.toFixed(0) + '%';
-    }
+    setText('pjIncomePctValue', sliderValue.toFixed(0) + '%');
   }
-
-  const inputs = ['pjAge', 'pjRetire', 'pjTargetCoast', 'pjMonthly', 'pjStep', 'pjReturn', 'pjSpend', 'pjMult', 'pjPort', 'pjIncomePct'];
-  inputs.forEach(function (id) {
+  updateProjectorReturnFromBuckets(false);
+  syncProjectorPortfolioInput();
+  ['pjAge', 'pjRetire', 'pjTargetCoast', 'pjMonthly', 'pjStep', 'pjReturn', 'pjSpend', 'pjMult', 'pjPort', 'pjIncomePct'].forEach(function (id) {
     const node = el(id);
-    if (!node || node.dataset.projectorBound === '1') {
-      return;
-    }
-
+    if (!node || node.dataset.projectorBound === '1') return;
     const update = function () {
-      if (id === 'pjIncomePct') {
-        const valueNode = el('pjIncomePctValue');
-        if (valueNode) {
-          valueNode.textContent = num(node.value, 0).toFixed(0) + '%';
-        }
-      }
+      if (id === 'pjIncomePct') setText('pjIncomePctValue', num(node.value, 0).toFixed(0) + '%');
       computeProjector();
     };
-
     node.addEventListener('input', update);
     node.addEventListener('change', update);
     node.dataset.projectorBound = '1';
   });
-
+  document.querySelectorAll('input[name="pjPortfolioSource"], #pjBucketList input').forEach(function (node) {
+    if (node.dataset.projectorBound === '1') return;
+    node.addEventListener('change', function () {
+      S.ui = S.ui || {};
+      S.ui.projectorPortfolioSource = getProjectorPortfolioSource();
+      save();
+      updateProjectorReturnFromBuckets(true);
+      syncProjectorPortfolioInput();
+      computeProjector();
+    });
+    node.dataset.projectorBound = '1';
+  });
   if (incomeToggle && incomeToggle.dataset.projectorBound !== '1') {
     incomeToggle.addEventListener('change', function () {
       S.ui = S.ui || {};
@@ -1821,156 +1832,64 @@ function renderProjector() {
     });
     incomeToggle.dataset.projectorBound = '1';
   }
-
   computeProjector();
 }
-
 function renderProjectionChart(series) {
   const node = el('pjYearlyChart');
-  if (!node) {
-    return;
-  }
-
-  if (charts['pjYearlyChart']) {
-    try {
-      charts['pjYearlyChart'].destroy();
-    } catch (_) {
-      // ignore
-    }
-  }
-
-  const labels = Array.isArray(series && series.labels) ? series.labels : [];
-  const deposited = Array.isArray(series && series.deposited) ? series.deposited : [];
-  const returns = Array.isArray(series && series.returns) ? series.returns : [];
-
-  if (!labels.length) {
-    return;
-  }
-
-  charts['pjYearlyChart'] = new Chart(node, {
-    type: 'bar',
+  if (!node || !series || !series.labels || !series.labels.length) return;
+  makeChart('pjYearlyChart', {
+    type: 'line',
     data: {
-      labels: labels,
+      labels: series.labels,
       datasets: [
-        {
-          label: 'Deposited',
-          data: deposited,
-          backgroundColor: '#0e7d8b',
-          borderRadius: 6
-        },
-        {
-          label: 'Returns',
-          data: returns,
-          backgroundColor: '#17c3b2',
-          borderRadius: 6
-        }
+        { label: 'Starting + deposits', data: series.deposited, borderColor: '#0b5a92', backgroundColor: 'rgba(11,90,146,.26)', tension: 0.25, fill: true, stack: 'portfolio' },
+        { label: 'Unrealized gains', data: series.gains, borderColor: '#17c3b2', backgroundColor: 'rgba(23,195,178,.36)', tension: 0.25, fill: true, stack: 'portfolio' },
+        { label: 'Coast FI target', data: series.coastTargets, borderColor: '#e08a1e', borderDash: [6, 5], tension: 0.25, fill: false, pointRadius: 2 }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: {
-        x: { stacked: true, ticks: { maxRotation: 0 } },
-        y: { stacked: true, beginAtZero: true }
-      },
-      plugins: {
-        legend: { display: true }
-      }
+      interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: { callbacks: { label: function (context) { return context.dataset.label + ': ' + peso(context.parsed.y); } } } },
+      scales: { y: { beginAtZero: true, stacked: true }, x: { stacked: true } }
     }
   });
 }
-
 function computeProjector() {
-  const age = num((el('pjAge') || {}).value, 25);
-  const retireAge = num((el('pjRetire') || {}).value, 55);
-  const monthlyContribution = num((el('pjMonthly') || {}).value, 0);
-  const step = num((el('pjStep') || {}).value, 0) / 100;
-  const returnRate = num((el('pjReturn') || {}).value, 6) / 100;
-  const spending = num((el('pjSpend') || {}).value, 0);
-  const withdrawalMultiple = num((el('pjMult') || {}).value, 30);
-  const startPortfolio = num((el('pjPort') || {}).value, 0);
-  const useIncomeBucket = projectorIncludeIncomeBucket();
-  const coverageTarget = normalizeCoverageRate(getProjectorIncomePct());
-  const targetCoastAge = getProjectorTargetCoastAge();
-  const scenario = projectRetirementScenario({
-    age: age,
-    targetAge: retireAge,
-    targetCoastAge: targetCoastAge,
-    monthlyContribution: monthlyContribution,
-    step: step,
-    returnRate: returnRate,
-    spending: spending,
-    startPortfolio: startPortfolio,
-    extraMonthly: 0,
-    lumpSum: 0,
-    useIncomeBucket: useIncomeBucket,
-    coverageTarget: coverageTarget,
-    withdrawalMultiple: withdrawalMultiple
-  });
-
-  const extraMonthly = solveExtraMonthlyContribution({
-    age: age,
-    targetAge: retireAge,
-    targetCoastAge: targetCoastAge,
-    monthlyContribution: monthlyContribution,
-    step: step,
-    returnRate: returnRate,
-    spending: spending,
-    startPortfolio: startPortfolio,
-    useIncomeBucket: useIncomeBucket,
-    coverageTarget: coverageTarget,
-    withdrawalMultiple: withdrawalMultiple
-  });
-  const requiredLumpSum = solveRequiredLumpSum({
-    age: age,
-    targetAge: retireAge,
-    targetCoastAge: targetCoastAge,
-    monthlyContribution: monthlyContribution,
-    step: step,
-    returnRate: returnRate,
-    spending: spending,
-    startPortfolio: startPortfolio,
-    useIncomeBucket: useIncomeBucket,
-    coverageTarget: coverageTarget,
-    withdrawalMultiple: withdrawalMultiple
-  });
-  const requiredSpendingReduction = solveRequiredSpendingReduction({
-    age: age,
-    targetAge: retireAge,
-    targetCoastAge: targetCoastAge,
-    monthlyContribution: monthlyContribution,
-    step: step,
-    returnRate: returnRate,
-    spending: spending,
-    startPortfolio: startPortfolio,
-    useIncomeBucket: useIncomeBucket,
-    coverageTarget: coverageTarget,
-    withdrawalMultiple: withdrawalMultiple
-  });
-  const requiredSpendingReductionPct = spending > 0 ? (requiredSpendingReduction / spending) * 100 : 0;
-  const canReachTargetCoastAge = scenario.coastAge != null && scenario.coastAge <= targetCoastAge;
-  const coastStatus = canReachTargetCoastAge ? ('You can reach Coast FI by age ' + targetCoastAge + '.') : ('Your current plan would not reach Coast FI by age ' + targetCoastAge + '.');
-
-  setText('pjResultTitle', coastStatus);
-  setText('pjResultCopy', useIncomeBucket
-    ? ('With your income coverage target of ' + pct(coverageTarget * 100) + ', the annual spending target becomes ' + peso(scenario.effectiveAnnualSpending) + ' and your coast target grows over time until it reaches full FIRE at your retirement age.')
-    : ('Turn on Income-Fi to lower the spending target used in the calculator and see how the coast target changes over time.'));
-  setText('pjRetireAgeValue', retireAge);
+  syncProjectorPortfolioInput();
+  const inputs = buildProjectorInputs();
+  const scenario = projectRetirementScenario(inputs);
+  const extraMonthly = solveExtraMonthlyContribution(inputs);
+  const requiredLumpSum = solveRequiredLumpSum(inputs);
+  const requiredSpendingReduction = solveRequiredSpendingReduction(inputs);
+  const requiredSpendingReductionPct = inputs.spending > 0 ? (requiredSpendingReduction / inputs.spending) * 100 : 0;
+  const canReachTargetCoastAge = scenario.coastAge != null && scenario.coastAge <= inputs.targetCoastAge;
+  const bucketLine = inputs.selectedBuckets.length ? inputs.selectedBuckets.join(' + ') : 'manual value';
+  setText('pjResultTitle', canReachTargetCoastAge ? ('Coast FI can be reached by age ' + inputs.targetCoastAge + '.') : ('Current path misses your age ' + inputs.targetCoastAge + ' Coast FI target.'));
+  setText('pjResultCopy', 'Start at ' + peso(inputs.startPortfolio) + ', count ' + peso(inputs.annualContribution) + '/yr from selected bucket contribution share, grow at ' + pct(inputs.returnRate * 100, 2) + ', and model expenses at ' + peso(scenario.effectiveAnnualSpending) + '/yr.');
+  setText('pjChartSub', 'Stacked area: Starting + deposits plus unrealized gains equals portfolio value. Coast target is the dashed line. Source: ' + bucketLine + '.');
+  setText('pjStartPortfolioValue', peso(inputs.startPortfolio));
+  setText('pjRetireAgeValue', inputs.targetAge);
   setText('pjFullFireValue', peso(scenario.fullFireNumber));
   setText('pjAdjustedSpendingValue', peso(scenario.effectiveAnnualSpending));
   setText('pjNoWithdrawValue', peso(scenario.portfolioAtTargetAgeNoWithdraw));
   setText('pjWithdrawValue', peso(scenario.portfolioAtTargetAgeWithWithdraw));
   setText('pjCoastAgeValue', scenario.coastAge != null ? ('Age ' + scenario.coastAge) : 'Not yet');
   setText('pjCoastTargetValue', scenario.coastTargetAtIntersection != null ? peso(scenario.coastTargetAtIntersection) : '—');
-  setText('pjFullFireAgeValue', scenario.fullFireAge != null ? ('Age ' + scenario.fullFireAge) : ('>' + retireAge));
+  setText('pjFullFireAgeValue', scenario.fullFireAge != null ? ('Age ' + scenario.fullFireAge) : ('>' + inputs.targetAge));
+  setText('pjCrossStartValue', scenario.coastAge != null ? peso(inputs.startPortfolio) : '—');
+  setText('pjCrossDepositValue', scenario.depositsAtIntersection != null ? peso(scenario.depositsAtIntersection) : '—');
+  setText('pjCrossGainValue', scenario.gainsAtIntersection != null ? peso(scenario.gainsAtIntersection) : '—');
+  setText('pjCrossPortfolioValue', scenario.portfolioAtIntersection != null ? peso(scenario.portfolioAtIntersection) : '—');
   renderProjectionChart(scenario.yearlyProjection);
   setText('pjSolveMonthlyValue', extraMonthly >= 1000000 ? '₱1M+/mo' : (peso(extraMonthly) + '/mo'));
   setText('pjSolveLumpValue', peso(requiredLumpSum));
   setText('pjSolveSpendValue', requiredSpendingReduction > 0 ? (peso(requiredSpendingReduction) + '/yr') : 'None');
-  setText('pjSolveMonthlyHint', extraMonthly > 0 ? ('Add ' + peso(extraMonthly) + '/month to hit your target coast age of ' + targetCoastAge + '.') : 'Your current contribution already gets you there.');
-  setText('pjSolveLumpHint', requiredLumpSum > 0 ? ('A single lump sum of ' + peso(requiredLumpSum) + ' closes the gap immediately.') : 'No lump sum is required with your current plan.');
-  setText('pjSolveSpendHint', requiredSpendingReduction > 0 ? ('Cut spending by ' + pct(requiredSpendingReductionPct) + ' per year to make the target easier to reach.') : 'Your current spending already fits your target.');
-  setText('pjResultFootnote', 'At age ' + retireAge + ', your balance would be ' + peso(scenario.portfolioAtTargetAgeNoWithdraw) + ' if you keep contributing and ' + peso(scenario.portfolioAtTargetAgeWithWithdraw) + ' if you stop contributing and withdraw your annual spending.');
+  setText('pjSolveMonthlyHint', extraMonthly > 0 ? ('Add ' + peso(extraMonthly) + '/month to hit age ' + inputs.targetCoastAge + '.') : 'Current monthly contribution already gets there.');
+  setText('pjSolveLumpHint', requiredLumpSum > 0 ? ('Add ' + peso(requiredLumpSum) + ' once to close the gap.') : 'No lump sum needed.');
+  setText('pjSolveSpendHint', requiredSpendingReduction > 0 ? ('Reduce annual spending by ' + pct(requiredSpendingReductionPct) + '.') : 'No spending cut needed.');
+  setText('pjResultFootnote', 'Selected buckets drive both starting value and counted monthly contribution share. Income remains an expense reducer only.');
 }
 
 /* ===== settings and holdings ===== */
@@ -2003,9 +1922,11 @@ function renderProfileForm() {
   setValue('pfRetGrowth', (profile.bucketReturns.Growth * 100).toFixed(1));
   setValue('pfRetIncome', (profile.bucketReturns.Income * 100).toFixed(1));
   setValue('pfRetStability', (profile.bucketReturns.Stability * 100).toFixed(1));
+  setValue('pfRetInsurance', (profile.bucketReturns.Insurance * 100).toFixed(1));
   setValue('pfDefGrowth', profile.defaultDistribution.Growth);
   setValue('pfDefIncome', profile.defaultDistribution.Income);
   setValue('pfDefStability', profile.defaultDistribution.Stability);
+  setValue('pfDefInsurance', profile.defaultDistribution.Insurance);
 
   const modeNode = el('pfReturnMode');
   if (modeNode) {
@@ -2027,7 +1948,7 @@ function syncReturnMode() {
     }
   });
 
-  ['pfRetGrowth', 'pfRetIncome', 'pfRetStability'].forEach(function (id) {
+  ['pfRetGrowth', 'pfRetIncome', 'pfRetStability', 'pfRetInsurance'].forEach(function (id) {
     const node = el(id);
     if (node) {
       node.disabled = !isAuto;
@@ -2062,12 +1983,14 @@ function saveProfile() {
   profile.bucketReturns = {
     Growth: numberField('pfRetGrowth', profile.bucketReturns.Growth * 100) / 100,
     Income: numberField('pfRetIncome', profile.bucketReturns.Income * 100) / 100,
-    Stability: numberField('pfRetStability', profile.bucketReturns.Stability * 100) / 100
+    Stability: numberField('pfRetStability', profile.bucketReturns.Stability * 100) / 100,
+    Insurance: numberField('pfRetInsurance', profile.bucketReturns.Insurance * 100) / 100
   };
   profile.defaultDistribution = {
     Growth: numberField('pfDefGrowth', profile.defaultDistribution.Growth),
     Income: numberField('pfDefIncome', profile.defaultDistribution.Income),
-    Stability: numberField('pfDefStability', profile.defaultDistribution.Stability)
+    Stability: numberField('pfDefStability', profile.defaultDistribution.Stability),
+    Insurance: numberField('pfDefInsurance', profile.defaultDistribution.Insurance)
   };
 
   delete profile.targetMonthlyIncome;
