@@ -7,7 +7,7 @@
   <title>Portfolio Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -18,11 +18,16 @@
       <h1>Portfolio Dashboard</h1>
       <span>Your Financial Freedom Command Center</span>
     </div>
-    <div style="position:relative">
+    <div class="header-actions">
+      <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme">
+        <span class="theme-icon" aria-hidden="true">&#9788;</span><span class="theme-label">Light</span>
+      </button>
+      <div style="position:relative">
       <button id="bellBtn">&#128276;<span id="bellBadge" class="badge bad"></span></button>
       <div id="bellPanel" class="card">
         <h4 style="margin:0 0 8px">Updates due</h4>
         <ul id="bellList" class="notif"></ul>
+      </div>
       </div>
     </div>
   </header>
@@ -91,13 +96,13 @@
               <label class="switch"><input type="checkbox" id="illiquidToggle"><span class="slider"></span></label>
             </div>
           </div>
-          <div class="chartwrap"><canvas id="chartBucket"></canvas></div>
+          <div class="chartwrap"><canvas id="chartBucket" style="margin: 0 auto;"></canvas></div>
           <ul id="legendBucket" class="legend"></ul>
           <div style="margin:10px 0"><span id="semiBadge" class="badge"></span></div>
         </div>
         <div class="card">
           <h3>Allocation by Holding</h3>
-          <div class="chartwrap"><canvas id="chartHolding"></canvas></div>
+          <div class="chartwrap"><canvas id="chartHolding" style="margin: 0 auto;"></canvas></div>
           <ul id="legendHolding" class="legend"></ul>
         </div>
       </div>
@@ -111,15 +116,35 @@
 
       <div class="card">
         <h3>Where Your Monthly Income Comes From</h3>
-        <div class="chartwrap"><canvas id="chartIncome"></canvas></div>
+        <div class="chartwrap"><canvas id="chartIncome" style="width: 100%; margin: 0 auto;"></canvas></div>
         <p class="note">MP2 is excluded from income calculations.</p>
       </div>
 
       <div class="card">
         <h3>Portfolio Value Over Time</h3>
-        <div class="chartwrap"><canvas id="chartValue"></canvas></div>
+        <div class="chartwrap"><canvas id="chartValue" style="width: 100%; margin: 0 auto;"></canvas></div>
         <p id="valueEmpty" style="display:none;color:var(--muted)">📸 Start tracking your journey. Save your first
           snapshot and watch your wealth grow over time.</p>
+      </div>
+
+      <div class="card growth-movers-card">
+        <div class="cardhead">
+          <div>
+            <h3 style="margin:0">Growth Bucket Movers</h3>
+            <p class="note" style="margin:5px 0 0">Unrealized performance based on current value versus invested capital.</p>
+          </div>
+        </div>
+        <div class="movers-grid">
+          <section class="movers-panel gainers-panel">
+            <h4>Top 3 Gainers</h4>
+            <div id="growthGainers" class="movers-list"></div>
+          </section>
+          <section class="movers-panel losers-panel">
+            <h4>Top 3 Losers</h4>
+            <div id="growthLosers" class="movers-list"></div>
+          </section>
+        </div>
+        <p id="growthMoversEmpty" class="note" style="display:none;margin:12px 0 0">Add invested capital and current prices to Growth holdings to see movers.</p>
       </div>
 
       <div class="quest">
@@ -164,7 +189,7 @@
           <div class="field"><label>Monthly dividend target (₱)</label><input id="divTarget"
               oninput="renderDividend()"><br><button class="btn alt" style="margin-top:6px"
               onclick="setTargetFromExpense('divTarget')">Calculate from Annual Expense</button></div>
-          <div class="field"><label>Desired net yield (%)</label><input id="divDesiredYield" value="7"
+          <div class="field"><label>Desired net yield (%)</label><input id="divDesiredYield" value="6"
               oninput="renderDividend()"></div>
         </div>
         <div class="grid cols-2">

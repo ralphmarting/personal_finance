@@ -235,7 +235,7 @@ function seed() {
     cadence: { currentPrice: 7, annualDividendPerUnit: 100, fxRate: 7 },
     milestones: seedMilestones(),
     achievedIds: [],
-    ui: { tab: 'dashboard', tool: 'dividend', excludeIlliquidCharts: true }
+    ui: { tab: 'dashboard', tool: 'dividend', excludeIlliquidCharts: true, theme: 'dark' }
   };
 }
 
@@ -290,6 +290,7 @@ function ensureDefaults() {
   S.achievedIds = Array.isArray(S.achievedIds) ? S.achievedIds : [];
   S.milestones = Array.isArray(S.milestones) && S.milestones.length ? S.milestones : seedMilestones();
   S.ui = S.ui || {};
+  S.ui.theme = S.ui.theme === 'light' ? 'light' : 'dark';
   S.ui.tab = S.ui.tab || 'dashboard';
   if (['alloc', 'target'].indexOf(S.ui.tool) >= 0) {
     S.ui.tool = 'dividend';
@@ -725,6 +726,68 @@ function showTool(name) {
   renderTools();
 }
 
+/* ===== view preferences and display metrics ===== */
+const HOLDING_BUCKET_ORDER = { Income: 0, Growth: 1, Stability: 2, Insurance: 3 };
+
+function orderedPositionsWithIndex() {
+  return S.positions.map(function (position, index) {
+    return { position: position, index: index };
+  }).sort(function (a, b) {
+    const bucketDifference = num(HOLDING_BUCKET_ORDER[a.position.bucket], 99) - num(HOLDING_BUCKET_ORDER[b.position.bucket], 99);
+    return bucketDifference || (a.index - b.index);
+  });
+}
+
+function getPositionPerformance(position) {
+  const invested = num(position.invested, 0);
+  const currentValue = valuePHP(position);
+  const gain = currentValue - invested;
+  return {
+    position: position,
+    invested: invested,
+    currentValue: currentValue,
+    gain: gain,
+    gainPct: invested ? (gain / invested) * 100 : 0
+  };
+}
+
+function getGrowthMovers() {
+  const ranked = S.positions.filter(function (position) {
+    return position.bucket === 'Growth' && num(position.invested, 0) > 0;
+  }).map(getPositionPerformance).sort(function (a, b) {
+    return b.gain - a.gain;
+  });
+
+  return {
+    gainers: ranked.filter(function (item) { return item.gain > 0; }).slice(0, 3),
+    losers: ranked.filter(function (item) { return item.gain < 0; }).sort(function (a, b) { return a.gain - b.gain; }).slice(0, 3)
+  };
+}
+
+function applyTheme(theme, shouldSave) {
+  const nextTheme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = nextTheme;
+  S.ui.theme = nextTheme;
+
+  const toggle = el('themeToggle');
+  if (toggle) {
+    const isDark = nextTheme === 'dark';
+    toggle.querySelector('.theme-icon').textContent = isDark ? '☀' : '☾';
+    toggle.querySelector('.theme-label').textContent = isDark ? 'Light' : 'Dark';
+    toggle.setAttribute('aria-label', 'Switch to ' + (isDark ? 'light' : 'dark') + ' mode');
+    toggle.title = 'Switch to ' + (isDark ? 'light' : 'dark') + ' mode';
+  }
+
+  if (shouldSave) {
+    save();
+    renderAll();
+  }
+}
+
+function toggleTheme() {
+  applyTheme(S.ui.theme === 'dark' ? 'light' : 'dark', true);
+}
+
 /* ===== rendering pipeline ===== */
 function renderAll() {
   [renderBell, renderDashboard, renderMilestones, renderTools, renderData].forEach(function (renderFn) {
@@ -774,7 +837,36 @@ function buildIncomeFiMessage(yieldOnCost, monthlyIncome) {
   return messages[Math.floor(Math.random() * messages.length)];
 }
 
+function renderGrowthMovers() {
+  const gainersNode = el('growthGainers');
+  const losersNode = el('growthLosers');
+  const emptyNode = el('growthMoversEmpty');
+  if (!gainersNode || !losersNode) {
+    return;
+  }
+
+  const movers = getGrowthMovers();
+  function rows(items, emptyText) {
+    if (!items.length) {
+      return '<p class="movers-empty">' + emptyText + '</p>';
+    }
+    return items.map(function (item) {
+      const positive = item.gain >= 0;
+      const signedAmount = (positive ? '+' : '−') + peso(Math.abs(item.gain));
+      const signedPct = (positive ? '+' : '−') + pct(Math.abs(item.gainPct), 2);
+      return '<div class="mover-row"><div><b>' + item.position.ticker + '</b><span>' + item.position.name + '</span></div><div class="mover-value ' + (positive ? 'up' : 'down') + '"><b>' + signedAmount + '</b><span>' + signedPct + '</span></div></div>';
+    }).join('');
+  }
+
+  gainersNode.innerHTML = rows(movers.gainers, 'No Growth holdings are currently above invested capital.');
+  losersNode.innerHTML = rows(movers.losers, 'No Growth holdings are currently below invested capital.');
+  if (emptyNode) {
+    emptyNode.style.display = (movers.gainers.length || movers.losers.length) ? 'none' : 'block';
+  }
+}
+
 function renderDashboard() {
+  renderGrowthMovers();
   const snapshot = getDashboardSnapshot();
   const portfolioTotals = snapshot.portfolioTotals;
   const coastMetrics = snapshot.coastMetrics;
@@ -1280,6 +1372,17 @@ function setTargetFromExpense(id) {
   toast('Planner target set to ' + peso(monthly) + '/mo from the current coverage target.');
 }
 
+function additionalCapitalAtTargetPrice(position, additionalAnnualNeeded, targetPrice) {
+  const netDividendPerUnit = num(position.div, 0) * (1 - effectiveTaxRate(position));
+  const currencyRate = position.currency === 'USD' ? fx() : 1;
+  const annualIncomePerUnitPHP = netDividendPerUnit * currencyRate;
+  if (annualIncomePerUnitPHP <= 0 || targetPrice <= 0) {
+    return 0;
+  }
+  const additionalUnits = additionalAnnualNeeded / annualIncomePerUnitPHP;
+  return additionalUnits * targetPrice * currencyRate;
+}
+
 function renderDividend() {
   const targetNode = el('divTarget');
   const targetMonthlyDefault = currentIncomeTargetAnnual() / 12;
@@ -1317,10 +1420,10 @@ function renderDividend() {
       const options = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
       return (position.currency === 'USD' ? '$' : '₱') + amount.toLocaleString(position.currency === 'USD' ? 'en-US' : 'en-PH', options);
     };
-    const additionalCapital = netYield > 0 ? (additionalAnnualNeeded / netYield) : 0;
+    const additionalCapital = additionalCapitalAtTargetPrice(position, additionalAnnualNeeded, targetPrice);
     const showBuy = currentPrice < targetPrice;
 
-    return '<tr><td>' + position.ticker + '</td><td>' + priceFormatter(currentPrice) + '</td><td>' + peso(currentMonthly) + '</td><td>' + pct(netYield * 100, 2) + '</td><td class="' + (showBuy ? 'buy' : 'wait') + '">' + priceFormatter(targetPrice) + '</td><td>' + (netYield > 0 ? peso(additionalCapital) : '—') + '</td></tr>';
+    return '<tr><td>' + position.ticker + '</td><td>' + priceFormatter(currentPrice) + '</td><td>' + peso(currentMonthly) + '</td><td>' + pct(netYield * 100, 2) + '</td><td class="' + (showBuy ? 'buy' : 'wait') + '">' + priceFormatter(targetPrice) + '</td><td>' + (additionalCapital > 0 ? peso(additionalCapital) : '—') + '</td></tr>';
   });
 
   setHtml('divTable', rows.join(''));
@@ -2010,7 +2113,9 @@ function renderPosCards() {
   const buckets = ['Growth', 'Income', 'Stability', 'Insurance'];
   const currencies = ['PHP', 'USD'];
 
-  box.innerHTML = S.positions.map(function (position, index) {
+  box.innerHTML = orderedPositionsWithIndex().map(function (item) {
+    const position = item.position;
+    const index = item.index;
     function select(field, options, value) {
       return '<select onchange="updatePos(' + index + ',\'' + field + '\',this.value)">' +
         options.map(function (option) {
@@ -2187,6 +2292,12 @@ function importJSON(file) {
 /* ===== init ===== */
 window.addEventListener('DOMContentLoaded', function () {
   load();
+  applyTheme(S.ui.theme, false);
+
+  const themeToggle = el('themeToggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', toggleTheme);
+  }
 
   document.querySelectorAll('.navbtn').forEach(function (button) {
     button.addEventListener('click', function () {
@@ -2238,3 +2349,5 @@ window.computeRebalance = computeRebalance;
 window.loadCurrentDistribution = loadCurrentDistribution;
 window.loadDefaultDistribution = loadDefaultDistribution;
 window.renderDividend = renderDividend;
+
+window.toggleTheme = toggleTheme;
