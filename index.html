@@ -96,13 +96,13 @@
               <label class="switch"><input type="checkbox" id="illiquidToggle"><span class="slider"></span></label>
             </div>
           </div>
-          <div class="chartwrap"><canvas id="chartBucket" style="margin: 0 auto;"></canvas></div>
+          <div class="chartwrap dashboard-chart dashboard-chart-square"><canvas id="chartBucket" style="margin: 0 auto;"></canvas></div>
           <ul id="legendBucket" class="legend"></ul>
           <div style="margin:10px 0"><span id="semiBadge" class="badge"></span></div>
         </div>
         <div class="card">
           <h3>Allocation by Holding</h3>
-          <div class="chartwrap"><canvas id="chartHolding" style="margin: 0 auto;"></canvas></div>
+          <div class="chartwrap dashboard-chart dashboard-chart-square"><canvas id="chartHolding" style="margin: 0 auto;"></canvas></div>
           <ul id="legendHolding" class="legend"></ul>
         </div>
       </div>
@@ -116,13 +116,13 @@
 
       <div class="card">
         <h3>Where Your Monthly Income Comes From</h3>
-        <div class="chartwrap"><canvas id="chartIncome" style="width: 100%; margin: 0 auto;"></canvas></div>
+        <div class="chartwrap dashboard-chart dashboard-chart-wide"><canvas id="chartIncome" style="width: 100%; margin: 0 auto;"></canvas></div>
         <p class="note">MP2 is excluded from income calculations.</p>
       </div>
 
       <div class="card">
         <h3>Portfolio Value Over Time</h3>
-        <div class="chartwrap"><canvas id="chartValue" style="width: 100%; margin: 0 auto;"></canvas></div>
+        <div class="chartwrap dashboard-chart dashboard-chart-wide"><canvas id="chartValue" style="width: 100%; margin: 0 auto;"></canvas></div>
         <p id="valueEmpty" style="display:none;color:var(--muted)">📸 Start tracking your journey. Save your first
           snapshot and watch your wealth grow over time.</p>
       </div>
@@ -265,7 +265,8 @@
             <p class="note">Monthly contribution follows Settings &gt; Default Distribution Profile. Annual step-up increases the monthly contribution every year.</p>
             <div class="grid">
               <div class="field"><label>Monthly contribution</label><input id="pjMonthly" type="number"></div>
-              <div class="field"><label>Annual step-up (%)</label><input id="pjStep" type="number"></div>
+              <div class="field"><label>Step-up unit</label><select id="pjStepMode"><option value="percent">Percent</option><option value="php">PHP per month</option></select></div>
+              <div class="field"><label id="pjStepLabel">Annual step-up (%)</label><input id="pjStep" type="number"></div>
               <div class="field"><label>Blended real return (%)</label><input id="pjReturn" type="number"></div>
             </div>
           </div>
@@ -367,7 +368,8 @@
           <p class="note">Bucket percentages define how much of the monthly contribution is counted by bucket. Coast Projector selected buckets use their own share only.</p>
           <div class="grid cols-3">
             <div class="field"><label>Monthly contribution (₱)</label><input id="pfMonthly"></div>
-            <div class="field"><label>Annual step-up (%)</label><input id="pfStep"></div>
+            <div class="field"><label>Step-up unit</label><select id="pfStepMode"><option value="percent">Percent</option><option value="php">PHP per month</option></select></div>
+            <div class="field"><label id="pfStepLabel">Annual step-up (%)</label><input id="pfStep"></div>
             <div class="field"><label>Growth %</label><input id="pfDefGrowth"></div>
             <div class="field"><label>Income %</label><input id="pfDefIncome"></div>
             <div class="field"><label>Stability %</label><input id="pfDefStability"></div>

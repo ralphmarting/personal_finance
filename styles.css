@@ -689,12 +689,21 @@ html[data-theme="dark"] .grid .hero:nth-child(3) {
 
 /* Full-width responsive chart surfaces. Chart.js can continue to own drawing. */
 .chartwrap {
-  width: 100%;
-  max-width: none;
+  max-width: 100%;
   height: auto;
   min-height: 280px;
+  max-height: 60vh;
   display: block;
   overflow: hidden;
+  margin: 0 auto;
+}
+.chartwrap.dashboard-chart {
+  min-height: 0;
+  padding: 0;
+  aspect-ratio: 2 / 1;
+}
+.chartwrap.dashboard-chart-square {
+  aspect-ratio: 1 / 1;
 }
 .chartwrap > canvas,
 .projector-chart-panel canvas {
@@ -759,7 +768,6 @@ html[data-theme="light"] .losers-panel {
 }
 
 @media (max-width: 760px) {
-  .chartwrap,
   .projector-chart-panel .chartwrap {
     min-height: 250px;
     aspect-ratio: 4 / 3;

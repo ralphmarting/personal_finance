@@ -247,6 +247,7 @@ function ensureDefaults() {
   profile.annualSpending = num(profile.annualSpending, 780000);
   profile.monthlyContribution = num(profile.monthlyContribution, 31500);
   profile.contribStepUp = num(profile.contribStepUp, 0.05);
+  profile.contribStepUpMode = profile.contribStepUpMode === 'php' ? 'php' : 'percent';
   profile.incomeCoverageTargetPct = num(
     profile.incomeCoverageTargetPct,
     profile.targetMonthlyIncome ? ((num(profile.targetMonthlyIncome) * 12) / (num(profile.annualSpending, 780000) || 1) * 100) : 50
@@ -338,7 +339,9 @@ function nonInsurancePositions() {
 }
 
 function allocationPositions() {
-  return S.positions.filter(function (position) {
+  return orderedPositionsWithIndex().map(function (item) {
+    return item.position;
+  }).filter(function (position) {
     const excludeIlliquid = S.ui.excludeIlliquidCharts && position.isIlliquid;
     return !excludeIlliquid;
   });
@@ -374,7 +377,9 @@ function incomePHP(position) {
 }
 
 function spendablePayers() {
-  return S.positions.filter(function (position) {
+  return orderedPositionsWithIndex().map(function (item) {
+    return item.position;
+  }).filter(function (position) {
     return num(position.div) > 0 && !isMP2(position);
   });
 }
@@ -572,6 +577,13 @@ function getCoastMetrics(options) {
   };
 }
 
+function nextAnnualContribution(annualContribution, step, mode, contributionShare) {
+  if (mode === 'php') {
+    return annualContribution + num(step, 0) * 12 * num(contributionShare, 1);
+  }
+  return annualContribution * (1 + num(step, 0));
+}
+
 function getWindDownMetrics(options) {
   const coastMetrics = getCoastMetrics(options);
   const currentValue = num(coastMetrics.currentValue, 0);
@@ -581,6 +593,7 @@ function getWindDownMetrics(options) {
   const retireAge = num(S.profile.retireAge, 55);
   const monthlyContribution = num(S.profile.monthlyContribution, 0);
   const annualStepUp = num(S.profile.contribStepUp, 0);
+  const annualStepUpMode = S.profile.contribStepUpMode || 'percent';
   const yearsRemaining = Math.max(retireAge - currentAge, 0);
   const growthStabilityShare = getCoastContributionShare();
 
@@ -608,7 +621,7 @@ function getWindDownMetrics(options) {
         break;
       }
 
-      annualContribution *= (1 + annualStepUp);
+      annualContribution = nextAnnualContribution(annualContribution, annualStepUp, annualStepUpMode, growthStabilityShare);
     }
   }
 
@@ -705,6 +718,7 @@ function showTab(name) {
   S.ui.tab = name;
   save();
   renderAll();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function showTool(name) {
@@ -734,7 +748,8 @@ function orderedPositionsWithIndex() {
     return { position: position, index: index };
   }).sort(function (a, b) {
     const bucketDifference = num(HOLDING_BUCKET_ORDER[a.position.bucket], 99) - num(HOLDING_BUCKET_ORDER[b.position.bucket], 99);
-    return bucketDifference || (a.index - b.index);
+    const investmentDifference = num(b.position.invested, 0) - num(a.position.invested, 0);
+    return bucketDifference || investmentDifference || (a.index - b.index);
   });
 }
 
@@ -1657,13 +1672,16 @@ function buildProjectorInputs() {
   const useIncomeBucket = projectorIncludeIncomeBucket();
   const monthlyContribution = num((el('pjMonthly') || {}).value, num(S.profile.monthlyContribution, 0));
   const contributionShare = getSelectedContributionShare(selectedBuckets);
+  const stepMode = (el('pjStepMode') || {}).value === 'php' ? 'php' : 'percent';
+  const stepValue = num((el('pjStep') || {}).value, 0);
   return {
     age: num((el('pjAge') || {}).value, num(S.profile.currentAge, 25)),
     targetAge: num((el('pjRetire') || {}).value, num(S.profile.retireAge, 55)),
     targetCoastAge: getProjectorTargetCoastAge(),
     monthlyContribution: monthlyContribution,
     annualContribution: monthlyContribution * 12 * contributionShare,
-    step: num((el('pjStep') || {}).value, 0) / 100,
+    step: stepMode === 'percent' ? stepValue / 100 : stepValue,
+    stepMode: stepMode,
     returnRate: num((el('pjReturn') || {}).value, 6) / 100,
     spending: num((el('pjSpend') || {}).value, 0),
     withdrawalMultiple: num((el('pjMult') || {}).value, 30),
@@ -1680,6 +1698,8 @@ function buildProjectionSeries(options) {
   const startPortfolio = num(options.startPortfolio, 0);
   const annualContribution = num(options.annualContribution, 0);
   const step = num(options.step, 0);
+  const stepMode = options.stepMode === 'php' ? 'php' : 'percent';
+  const contributionShare = num(options.contributionShare, 1);
   const returnRate = num(options.returnRate, 0.06);
   const annualFireSpend = num(options.annualFireSpend, 0);
   const labels = [String(age)];
@@ -1719,7 +1739,7 @@ function buildProjectionSeries(options) {
       depositsAtIntersection = cumulativeNewDeposits;
       gainsAtIntersection = cumulativeGains;
     }
-    contributionValue *= (1 + step);
+    contributionValue = nextAnnualContribution(contributionValue, step, stepMode, contributionShare);
   }
   return {
     labels: labels,
@@ -1745,7 +1765,8 @@ function projectRetirementScenario(options) {
   });
   const fullRetirementNeed = spendingInputs.annualSpending * num(options.withdrawalMultiple, 30);
   const adjustedRetirementNeed = spendingInputs.effectiveAnnualSpending * num(options.withdrawalMultiple, 30);
-  const annualContribution = (num(options.monthlyContribution, 0) + num(options.extraMonthly, 0)) * 12 * num(options.contributionShare, getSelectedContributionShare(options.selectedBuckets));
+  const contributionShare = num(options.contributionShare, getSelectedContributionShare(options.selectedBuckets));
+  const annualContribution = (num(options.monthlyContribution, 0) + num(options.extraMonthly, 0)) * 12 * contributionShare;
   const startPortfolio = num(options.startPortfolio, 0) + num(options.lumpSum, 0);
   const yearlyProjection = buildProjectionSeries({
     age: options.age,
@@ -1753,6 +1774,8 @@ function projectRetirementScenario(options) {
     startPortfolio: startPortfolio,
     annualContribution: annualContribution,
     step: options.step,
+    stepMode: options.stepMode,
+    contributionShare: contributionShare,
     returnRate: options.returnRate,
     annualFireSpend: adjustedRetirementNeed
   });
@@ -1774,7 +1797,7 @@ function projectRetirementScenario(options) {
     if (!contributing) {
       portfolioWithWithdraw -= spendingInputs.effectiveAnnualSpending;
     }
-    contributionValue *= (1 + num(options.step, 0));
+    contributionValue = nextAnnualContribution(contributionValue, options.step, options.stepMode, contributionShare);
   }
   return {
     fullRetirementNeed: fullRetirementNeed,
@@ -1884,7 +1907,13 @@ function renderProjector() {
   setValue('pjAge', profile.currentAge);
   setValue('pjRetire', profile.retireAge);
   setValue('pjMonthly', profile.monthlyContribution);
-  setValue('pjStep', (profile.contribStepUp * 100).toFixed(1));
+  const stepMode = profile.contribStepUpMode === 'php' ? 'php' : 'percent';
+  const stepModeNode = el('pjStepMode');
+  if (stepModeNode && stepModeNode.dataset.projectorInitialized !== '1') {
+    stepModeNode.value = stepMode;
+    stepModeNode.dataset.projectorInitialized = '1';
+  }
+  setValue('pjStep', stepMode === 'percent' ? (profile.contribStepUp * 100).toFixed(1) : profile.contribStepUp);
   setValue('pjReturn', (getBlendedReturnRate(['Growth', 'Stability']) * 100).toFixed(2));
   setValue('pjSpend', profile.annualSpending);
   setValue('pjTargetCoast', Math.max(num(profile.currentAge, 25) + 1, num(profile.retireAge, 55) - 5));
@@ -1903,11 +1932,13 @@ function renderProjector() {
   }
   updateProjectorReturnFromBuckets(false);
   syncProjectorPortfolioInput();
-  ['pjAge', 'pjRetire', 'pjTargetCoast', 'pjMonthly', 'pjStep', 'pjReturn', 'pjSpend', 'pjMult', 'pjPort', 'pjIncomePct'].forEach(function (id) {
+  syncContributionStepLabels();
+  ['pjAge', 'pjRetire', 'pjTargetCoast', 'pjMonthly', 'pjStep', 'pjStepMode', 'pjReturn', 'pjSpend', 'pjMult', 'pjPort', 'pjIncomePct'].forEach(function (id) {
     const node = el(id);
     if (!node || node.dataset.projectorBound === '1') return;
     const update = function () {
       if (id === 'pjIncomePct') setText('pjIncomePctValue', num(node.value, 0).toFixed(0) + '%');
+      if (id === 'pjStepMode') syncContributionStepLabels();
       computeProjector();
     };
     node.addEventListener('input', update);
@@ -2015,7 +2046,9 @@ function renderProfileForm() {
   setValue('pfRetire', profile.retireAge);
   setValue('pfSpend', profile.annualSpending);
   setValue('pfMonthly', profile.monthlyContribution);
-  setValue('pfStep', (profile.contribStepUp * 100).toFixed(1));
+  const stepMode = profile.contribStepUpMode === 'php' ? 'php' : 'percent';
+  setValue('pfStepMode', stepMode);
+  setValue('pfStep', stepMode === 'percent' ? (profile.contribStepUp * 100).toFixed(1) : profile.contribStepUp);
   setValue('pfIncomePct', num(profile.incomeCoverageTargetPct, 50).toFixed(0));
   setValue('pfNetYield', (profile.defaultNetYield * 100).toFixed(1));
   setValue('pfDivTax', (profile.domesticDivTax * 100).toFixed(1));
@@ -2037,7 +2070,22 @@ function renderProfileForm() {
     modeNode.onchange = syncReturnMode;
   }
 
+  const stepModeNode = el('pfStepMode');
+  if (stepModeNode) {
+    stepModeNode.onchange = syncContributionStepLabels;
+  }
+  syncContributionStepLabels();
   syncReturnMode();
+}
+
+function syncContributionStepLabels() {
+  ['pj', 'pf'].forEach(function (prefix) {
+    const mode = (el(prefix + 'StepMode') || {}).value;
+    const label = el(prefix + 'StepLabel');
+    if (label) {
+      label.textContent = mode === 'php' ? 'Annual step-up (₱/mo)' : 'Annual step-up (%)';
+    }
+  });
 }
 
 function syncReturnMode() {
@@ -2069,7 +2117,9 @@ function saveProfile() {
   profile.retireAge = numberField('pfRetire', profile.retireAge);
   profile.annualSpending = numberField('pfSpend', profile.annualSpending);
   profile.monthlyContribution = numberField('pfMonthly', profile.monthlyContribution);
-  profile.contribStepUp = numberField('pfStep', profile.contribStepUp * 100) / 100;
+  profile.contribStepUpMode = (el('pfStepMode') || {}).value === 'php' ? 'php' : 'percent';
+  const stepValue = numberField('pfStep', profile.contribStepUpMode === 'percent' ? profile.contribStepUp * 100 : profile.contribStepUp);
+  profile.contribStepUp = profile.contribStepUpMode === 'percent' ? stepValue / 100 : stepValue;
   profile.incomeCoverageTargetPct = numberField('pfIncomePct', profile.incomeCoverageTargetPct);
   profile.defaultNetYield = numberField('pfNetYield', profile.defaultNetYield * 100) / 100;
   profile.domesticDivTax = numberField('pfDivTax', profile.domesticDivTax * 100) / 100;
