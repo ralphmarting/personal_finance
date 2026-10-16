@@ -98,7 +98,6 @@
           </div>
           <div class="chartwrap dashboard-chart dashboard-chart-square"><canvas id="chartBucket" style="margin: 0 auto;"></canvas></div>
           <ul id="legendBucket" class="legend"></ul>
-          <div style="margin:10px 0"><span id="semiBadge" class="badge"></span></div>
         </div>
         <div class="card">
           <h3>Allocation by Holding</h3>
@@ -130,21 +129,21 @@
       <div class="card growth-movers-card">
         <div class="cardhead">
           <div>
-            <h3 style="margin:0">Growth Bucket Movers</h3>
+            <h3 style="margin:0">Liquid Holdings Movers</h3>
             <p class="note" style="margin:5px 0 0">Unrealized performance based on current value versus invested capital.</p>
           </div>
         </div>
         <div class="movers-grid">
           <section class="movers-panel gainers-panel">
-            <h4>Top 3 Gainers</h4>
+            <h4>Gainers</h4>
             <div id="growthGainers" class="movers-list"></div>
           </section>
           <section class="movers-panel losers-panel">
-            <h4>Top 3 Losers</h4>
+            <h4>Losers</h4>
             <div id="growthLosers" class="movers-list"></div>
           </section>
         </div>
-        <p id="growthMoversEmpty" class="note" style="display:none;margin:12px 0 0">Add invested capital and current prices to Growth holdings to see movers.</p>
+        <p id="growthMoversEmpty" class="note" style="display:none;margin:12px 0 0">Add invested capital and current prices to liquid holdings to see movers.</p>
       </div>
 
       <div class="quest">
@@ -181,6 +180,7 @@
         <button class="toolbtn" data-tool="rebalance" onclick="showTool('rebalance')">&#9878;&#65039;
           Rebalancer</button>
         <button class="toolbtn" data-tool="projector" onclick="showTool('projector')">&#128200; Coast Projector</button>
+        <button class="toolbtn" data-tool="quickupdate" onclick="showTool('quickupdate')">&#9998; Quick Update</button>
       </div>
 
       <div id="tool-dividend" class="tool active card">
@@ -189,8 +189,7 @@
           <div class="field"><label>Monthly dividend target (₱)</label><input id="divTarget"
               oninput="renderDividend()"><br><button class="btn alt" style="margin-top:6px"
               onclick="setTargetFromExpense('divTarget')">Calculate from Annual Expense</button></div>
-          <div class="field"><label>Desired net yield (%)</label><input id="divDesiredYield" value="6"
-              oninput="renderDividend()"></div>
+            <div class="field"><label>Desired net yield (%)</label><input id="divDesiredYield" type="number" min="0.01" step="any"></div>
         </div>
         <div class="grid cols-2">
           <div>
@@ -347,6 +346,58 @@
           </div>
         </div>
       </div>
+
+      <div id="tool-quickupdate" class="tool card">
+        <div class="cardhead quick-update-heading">
+          <div>
+            <h3 style="margin:0">Quick Update</h3>
+            <p class="note" style="margin:6px 0 0">Record trades or edit holding balances directly.</p>
+          </div>
+          <button id="quickUpdateSave" class="btn" type="button" onclick="saveQuickUpdates()" disabled>Save updates</button>
+        </div>
+        <section class="quick-transaction">
+          <h4>Record a trade</h4>
+          <p class="note">Enter price and fees in PHP for every holding. Sells remove units at average cost basis; trade entries stay in this browser session and are not included in JSON backups.</p>
+          <form id="quickTradeForm" class="quick-transaction-form" onsubmit="recordQuickTransaction(event)">
+            <div class="field quick-trade-holding"><label for="quickTradeHolding">Holding</label><select id="quickTradeHolding" required></select></div>
+            <div class="field"><label for="quickTradeSide">Action</label><select id="quickTradeSide"><option value="buy">Buy</option><option value="sell">Sell</option></select></div>
+            <div class="field"><label for="quickTradeUnits">Units</label><input id="quickTradeUnits" type="number" min="0.00000001" step="any" inputmode="decimal" required></div>
+            <div class="field"><label for="quickTradePrice">Price per unit (PHP)</label><input id="quickTradePrice" type="number" min="0.00000001" step="any" inputmode="decimal" required></div>
+            <div class="field"><label for="quickTradeFees">Fees (PHP)</label><input id="quickTradeFees" type="number" min="0" step="any" inputmode="decimal" value="0" required></div>
+            <button id="quickTradeSubmit" class="btn" type="submit" disabled>Record transaction</button>
+          </form>
+          <p id="quickTradePreview" class="note quick-transaction-preview" aria-live="polite">Choose a holding and enter transaction details.</p>
+        </section>
+        <details id="quickTransactionHistory" class="quick-transaction-history" style="display:none">
+          <summary>Recent transactions</summary>
+          <div class="quick-update-table-wrap">
+            <table class="quick-transaction-table">
+              <thead><tr><th>Date</th><th>Action</th><th>Holding</th><th>Units</th><th>Price (PHP)</th><th>Fees (PHP)</th><th>Realized P/L</th></tr></thead>
+              <tbody id="quickTransactionRows"></tbody>
+            </table>
+          </div>
+        </details>
+        <div class="quick-update-toolbar">
+          <input id="quickUpdateSearch" type="search" placeholder="Search ticker or holding" aria-label="Search holdings">
+          <p id="quickUpdateStatus" class="note" aria-live="polite">No pending changes.</p>
+        </div>
+        <div class="quick-update-table-wrap">
+          <table class="quick-update-table">
+            <thead>
+              <tr>
+                <th>Holding</th>
+                <th>Units</th>
+                <th>Current price</th>
+                <th>Invested (PHP)</th>
+                <th>Market value (PHP)</th>
+              </tr>
+            </thead>
+            <tbody id="quickUpdateRows"></tbody>
+          </table>
+        </div>
+        <p id="quickUpdateEmpty" class="note" style="display:none">Add a holding in Settings to update it here.</p>
+        <p id="quickUpdateNoResults" class="note" style="display:none">No holdings match that search.</p>
+      </div>
     </section>
 
     <!-- DATA / SETTINGS -->
@@ -360,7 +411,7 @@
             <div class="field"><label>Retire age</label><input id="pfRetire"></div>
             <div class="field"><label>Annual spending (₱)</label><input id="pfSpend"></div>
             <div class="field"><label>Withdrawal multiple</label><input id="pfMult"></div>
-            <div class="field"><label>Income coverage target (% of spending)</label><input id="pfIncomePct"><button class="btn alt" style="margin-top:6px" onclick="setTargetFromExpense('divTarget')">Preview in Planner</button></div>
+            <div class="field"><label>Income coverage target (% of spending)</label><input id="pfIncomePct"><button class="btn alt" style="margin-top:6px" onclick="showTab('tools');showTool('dividend');setTargetFromExpense('divTarget')">Preview in Planner</button></div>
           </div>
         </div>
         <div class="settings-group">
@@ -400,7 +451,10 @@
       </div>
 
       <div class="card">
-        <h3>Holdings</h3>
+        <div class="cardhead quick-update-heading">
+          <h3 style="margin:0">Holdings</h3>
+          <button class="btn alt" type="button" onclick="showTab('tools');showTool('quickupdate')">&#9998; Quick Update</button>
+        </div>
         <div id="posCards" class="poscards"></div>
         <h3 style="margin-top:20px">Add Holding</h3>
         <div class="grid cols-3">

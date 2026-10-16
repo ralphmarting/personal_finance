@@ -1,7 +1,11 @@
 /* Portfolio Dashboard */
 const APP_KEY = 'portfolioDataV4';
+const QUICK_TRANSACTION_HISTORY_KEY = 'quickUpdateHistoryV1';
 let S = {};
 let charts = {};
+let quickUpdateDrafts = new Map();
+let quickUpdateFilter = '';
+let quickTransactionHistory = [];
 const LEGEND_PALETTE = [
   '#0e7d8b',
   '#17c3b2',
@@ -16,13 +20,6 @@ const LEGEND_PALETTE = [
   '#7fe0a1',
   '#c9a6ff'
 ];
-const SEMI = {
-  SMH: 100,
-  SPMO: 45,
-  SOXX: 100,
-  'SPY-UITF': 10,
-  'MANULIFE-ASIA': 15
-};
 const CATEGORIES_BY_TYPE = {
   Capital: '💰',
   Growth: '📈',
@@ -97,6 +94,24 @@ function clamp(value, min, max) {
 
 function save() {
   localStorage.setItem(APP_KEY, JSON.stringify(S));
+}
+
+function loadQuickTransactionHistory() {
+  try {
+    const raw = sessionStorage.getItem(QUICK_TRANSACTION_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    quickTransactionHistory = Array.isArray(parsed) ? parsed.slice(0, 8) : [];
+  } catch (_) {
+    quickTransactionHistory = [];
+  }
+}
+
+function saveQuickTransactionHistory() {
+  try {
+    sessionStorage.setItem(QUICK_TRANSACTION_HISTORY_KEY, JSON.stringify(quickTransactionHistory.slice(0, 8)));
+  } catch (_) {
+    quickTransactionHistory = quickTransactionHistory.slice(0, 8);
+  }
 }
 
 function toast(message) {
@@ -286,6 +301,7 @@ function ensureDefaults() {
     position.invested = num(position.invested, 0);
     position.isIlliquid = !!position.isIlliquid;
   });
+  delete S.transactions;
   S.snapshots = Array.isArray(S.snapshots) ? S.snapshots : [];
   S.cadence = S.cadence || { currentPrice: 7, annualDividendPerUnit: 100, fxRate: 7 };
   S.achievedIds = Array.isArray(S.achievedIds) ? S.achievedIds : [];
@@ -647,20 +663,6 @@ function historicalPct() {
     : 0;
 }
 
-function semiExposure(filteredPositions) {
-  const arr = filteredPositions || S.positions;
-  let numerator = 0;
-  let denominator = 0;
-
-  arr.forEach(function (position) {
-    const value = valuePHP(position);
-    denominator += value;
-    numerator += value * ((SEMI[position.ticker] || 0) / 100);
-  });
-
-  return denominator ? (numerator / denominator) * 100 : 0;
-}
-
 /* ===== staleness ===== */
 function stale() {
   const result = [];
@@ -768,14 +770,14 @@ function getPositionPerformance(position) {
 
 function getGrowthMovers() {
   const ranked = S.positions.filter(function (position) {
-    return position.bucket === 'Growth' && num(position.invested, 0) > 0;
+    return !position.isIlliquid && num(position.invested, 0) > 0;
   }).map(getPositionPerformance).sort(function (a, b) {
     return b.gain - a.gain;
   });
 
   return {
-    gainers: ranked.filter(function (item) { return item.gain > 0; }).slice(0, 3),
-    losers: ranked.filter(function (item) { return item.gain < 0; }).sort(function (a, b) { return a.gain - b.gain; }).slice(0, 3)
+    gainers: ranked.filter(function (item) { return item.gain > 0; }),
+    losers: ranked.filter(function (item) { return item.gain < 0; }).sort(function (a, b) { return a.gain - b.gain; })
   };
 }
 
@@ -873,8 +875,8 @@ function renderGrowthMovers() {
     }).join('');
   }
 
-  gainersNode.innerHTML = rows(movers.gainers, 'No Growth holdings are currently above invested capital.');
-  losersNode.innerHTML = rows(movers.losers, 'No Growth holdings are currently below invested capital.');
+  gainersNode.innerHTML = rows(movers.gainers, 'No liquid holdings are currently above invested capital.');
+  losersNode.innerHTML = rows(movers.losers, 'No liquid holdings are currently below invested capital.');
   if (emptyNode) {
     emptyNode.style.display = (movers.gainers.length || movers.losers.length) ? 'none' : 'block';
   }
@@ -943,14 +945,6 @@ function renderDashboard() {
   }
 
   nextUp(portfolioTotals, coastMetrics);
-
-  const positionsForCharts = allocationPositions();
-  const semiBadge = el('semiBadge');
-  if (semiBadge) {
-    const semiValue = semiExposure(positionsForCharts);
-    semiBadge.textContent = 'Semiconductor exposure: ' + semiValue.toFixed(1) + '% (cap 30%)';
-    semiBadge.className = 'badge ' + (semiValue <= 30 ? 'ok' : 'warn');
-  }
 
   drawBucket();
   drawHolding();
@@ -1363,7 +1357,8 @@ function renderTools() {
   const map = {
     dividend: renderDividend,
     rebalance: renderRebalance,
-    projector: renderProjector
+    projector: renderProjector,
+    quickupdate: renderQuickUpdate
   };
 
   if (map[active]) {
@@ -1373,6 +1368,428 @@ function renderTools() {
       console.error(error);
     }
   }
+}
+
+function renderQuickUpdate() {
+  const rowsNode = el('quickUpdateRows');
+  const searchNode = el('quickUpdateSearch');
+  if (!rowsNode || !searchNode) {
+    return;
+  }
+
+  quickUpdateDrafts.forEach(function (_, position) {
+    if (S.positions.indexOf(position) < 0) {
+      quickUpdateDrafts.delete(position);
+    }
+  });
+
+  searchNode.value = quickUpdateFilter;
+  searchNode.oninput = function () {
+    filterQuickUpdateRows(searchNode.value);
+  };
+  rowsNode.innerHTML = '';
+
+  orderedPositionsWithIndex().forEach(function (item) {
+    const position = item.position;
+    const draft = quickUpdateDrafts.get(position) || {};
+    const row = document.createElement('tr');
+    row.className = 'quick-update-row';
+    row.dataset.positionIndex = item.index;
+    row.dataset.search = (position.ticker + ' ' + position.name).toLowerCase();
+
+    const holdingCell = document.createElement('td');
+    holdingCell.dataset.label = 'Holding';
+    const holdingLabel = document.createElement('div');
+    holdingLabel.className = 'quick-update-holding';
+    const ticker = document.createElement('b');
+    ticker.textContent = position.ticker;
+    const name = document.createElement('span');
+    name.textContent = position.name;
+    holdingLabel.appendChild(ticker);
+    holdingLabel.appendChild(name);
+    holdingCell.appendChild(holdingLabel);
+    row.appendChild(holdingCell);
+
+    [
+      { field: 'units', label: 'Units' },
+      { field: 'currentPrice', label: 'Price (' + position.currency + ')' },
+      { field: 'invested', label: 'Invested (PHP)' }
+    ].forEach(function (column) {
+      const cell = document.createElement('td');
+      cell.dataset.label = column.label;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.step = 'any';
+      input.required = true;
+      input.inputMode = 'decimal';
+      input.value = Object.prototype.hasOwnProperty.call(draft, column.field)
+        ? draft[column.field]
+        : position[column.field];
+      input.setAttribute('aria-label', position.ticker + ' ' + column.label);
+      input.dataset.field = column.field;
+      input.setAttribute('aria-invalid', String(isQuickUpdateValueInvalid(input.value)));
+      input.addEventListener('input', function () {
+        updateQuickUpdateDraft(position, column.field, input.value, input, row);
+      });
+      cell.appendChild(input);
+      row.appendChild(cell);
+    });
+
+    const valueCell = document.createElement('td');
+    valueCell.dataset.label = 'Market value (PHP)';
+    valueCell.className = 'quick-update-value';
+    valueCell.textContent = peso(getQuickUpdateMarketValue(position, draft));
+    row.appendChild(valueCell);
+    rowsNode.appendChild(row);
+  });
+
+  filterQuickUpdateRows(quickUpdateFilter);
+  renderQuickTransactionForm();
+  renderQuickTransactionHistory();
+  refreshQuickUpdateStatus();
+}
+
+function renderQuickTransactionForm() {
+  const holdingNode = el('quickTradeHolding');
+  const sideNode = el('quickTradeSide');
+  const unitsNode = el('quickTradeUnits');
+  const priceNode = el('quickTradePrice');
+  const feesNode = el('quickTradeFees');
+  if (!holdingNode || !sideNode || !unitsNode || !priceNode || !feesNode) {
+    return;
+  }
+
+  const selectedValue = holdingNode.value;
+  const holdings = orderedPositionsWithIndex();
+  holdingNode.innerHTML = '';
+  holdings.forEach(function (item) {
+    const option = document.createElement('option');
+    option.value = item.index;
+    option.textContent = item.position.ticker + ' | ' + item.position.name;
+    holdingNode.appendChild(option);
+  });
+
+  const selectionExists = holdings.some(function (item) {
+    return String(item.index) === selectedValue;
+  });
+  holdingNode.value = selectionExists ? selectedValue : (holdings.length ? String(holdings[0].index) : '');
+
+  const hasHoldings = holdings.length > 0;
+  holdingNode.disabled = !hasHoldings;
+  sideNode.disabled = !hasHoldings;
+  unitsNode.disabled = !hasHoldings;
+  priceNode.disabled = !hasHoldings;
+  feesNode.disabled = !hasHoldings;
+  holdingNode.onchange = renderQuickTransactionForm;
+  sideNode.onchange = renderQuickTransactionPreview;
+  unitsNode.oninput = renderQuickTransactionPreview;
+  priceNode.oninput = renderQuickTransactionPreview;
+  feesNode.oninput = renderQuickTransactionPreview;
+  renderQuickTransactionPreview();
+}
+
+function calculateQuickTransaction() {
+  const position = S.positions[Number((el('quickTradeHolding') || {}).value)];
+  const side = (el('quickTradeSide') || {}).value;
+  const unitsRaw = (el('quickTradeUnits') || {}).value;
+  const priceRaw = (el('quickTradePrice') || {}).value;
+  const feesRaw = (el('quickTradeFees') || {}).value;
+  const units = Number(unitsRaw);
+  const price = Number(priceRaw);
+  const fees = Number(feesRaw);
+
+  function invalid(message) {
+    return { valid: false, message: message };
+  }
+
+  if (!position) {
+    return invalid('Add a holding before recording a transaction.');
+  }
+  if (quickUpdateDrafts.has(position)) {
+    return invalid('Save or reset this holding’s pending Quick Update edits first.');
+  }
+  if (side !== 'buy' && side !== 'sell') {
+    return invalid('Choose Buy or Sell.');
+  }
+  if (unitsRaw === '' || !Number.isFinite(units) || units <= 0) {
+    return invalid('Enter a transaction quantity greater than zero.');
+  }
+  if (priceRaw === '' || !Number.isFinite(price) || price <= 0) {
+    return invalid('Enter a price greater than zero.');
+  }
+  if (feesRaw === '' || !Number.isFinite(fees) || fees < 0) {
+    return invalid('Enter fees of zero or more.');
+  }
+
+  const currentUnits = num(position.units, 0);
+  const currentInvested = Math.max(0, num(position.invested, 0));
+  const tradeGross = units * price;
+  if (side === 'sell' && units > currentUnits) {
+    return invalid('You cannot sell more units than this holding contains.');
+  }
+  if (side === 'sell' && fees > tradeGross) {
+    return invalid('Fees cannot exceed the sale value.');
+  }
+
+  const unitsAfter = side === 'buy'
+    ? currentUnits + units
+    : Math.max(0, currentUnits - units);
+  const costBasisRemovedPHP = side === 'sell' && currentUnits
+    ? currentInvested * (units / currentUnits)
+    : 0;
+  const cashFlowPHP = side === 'buy'
+    ? tradeGross + fees
+    : tradeGross - fees;
+  const investedAfterPHP = side === 'buy'
+    ? currentInvested + cashFlowPHP
+    : (unitsAfter === 0 ? 0 : Math.max(0, currentInvested - costBasisRemovedPHP));
+
+  return {
+    valid: true,
+    position: position,
+    side: side,
+    units: units,
+    price: price,
+    fees: fees,
+    unitsAfter: unitsAfter,
+    cashFlowPHP: cashFlowPHP,
+    investedAfterPHP: investedAfterPHP,
+    costBasisRemovedPHP: costBasisRemovedPHP,
+    realizedGainPHP: side === 'sell' ? cashFlowPHP - costBasisRemovedPHP : null
+  };
+}
+
+function renderQuickTransactionPreview() {
+  const previewNode = el('quickTradePreview');
+  const submitNode = el('quickTradeSubmit');
+  if (!previewNode || !submitNode) {
+    return;
+  }
+
+  const unitsValue = (el('quickTradeUnits') || {}).value;
+  const priceValue = (el('quickTradePrice') || {}).value;
+  if (!unitsValue && !priceValue) {
+    previewNode.className = 'note quick-transaction-preview';
+    previewNode.textContent = 'Choose a holding and enter transaction details.';
+    submitNode.disabled = true;
+    return;
+  }
+
+  const calculation = calculateQuickTransaction();
+  previewNode.className = 'note quick-transaction-preview' + (calculation.valid ? '' : ' is-invalid');
+  submitNode.disabled = !calculation.valid;
+  if (!calculation.valid) {
+    previewNode.textContent = calculation.message;
+    return;
+  }
+
+  const unitsAfter = calculation.unitsAfter.toLocaleString('en-US', { maximumFractionDigits: 8 });
+  if (calculation.side === 'buy') {
+    previewNode.textContent = 'After buy: ' + unitsAfter + ' units; invested ' + peso(calculation.investedAfterPHP, 2) + ' (trade cost ' + peso(calculation.cashFlowPHP, 2) + ').';
+  } else {
+    const realizedSign = calculation.realizedGainPHP > 0 ? '+' : '';
+    previewNode.textContent = 'After sell: ' + unitsAfter + ' units; invested ' + peso(calculation.investedAfterPHP, 2) + ' (cost basis removed ' + peso(calculation.costBasisRemovedPHP, 2) + ', realized P/L ' + realizedSign + peso(calculation.realizedGainPHP, 2) + ').';
+  }
+}
+
+function recordQuickTransaction(event) {
+  event.preventDefault();
+  const calculation = calculateQuickTransaction();
+  if (!calculation.valid) {
+    renderQuickTransactionPreview();
+    return;
+  }
+
+  const position = calculation.position;
+  setPositionField(position, 'units', calculation.unitsAfter);
+  setPositionField(position, 'invested', calculation.investedAfterPHP);
+  quickTransactionHistory.unshift({
+    timestamp: new Date().toISOString(),
+    ticker: position.ticker,
+    name: position.name,
+    side: calculation.side,
+    units: calculation.units,
+    pricePHP: calculation.price,
+    feesPHP: calculation.fees,
+    cashFlowPHP: calculation.cashFlowPHP,
+    costBasisRemovedPHP: calculation.costBasisRemovedPHP,
+    realizedGainPHP: calculation.realizedGainPHP,
+    unitsAfter: calculation.unitsAfter,
+    investedAfterPHP: calculation.investedAfterPHP
+  });
+  quickTransactionHistory = quickTransactionHistory.slice(0, 8);
+  saveQuickTransactionHistory();
+
+  el('quickTradeUnits').value = '';
+  el('quickTradePrice').value = '';
+  el('quickTradeFees').value = '0';
+  save();
+  renderAll();
+  toast((calculation.side === 'buy' ? 'Buy' : 'Sell') + ' recorded for ' + position.ticker + '.');
+}
+
+function renderQuickTransactionHistory() {
+  const section = el('quickTransactionHistory');
+  const rowsNode = el('quickTransactionRows');
+  if (!section || !rowsNode) {
+    return;
+  }
+
+  const recentTransactions = quickTransactionHistory;
+  section.style.display = recentTransactions.length ? 'block' : 'none';
+  rowsNode.innerHTML = '';
+  recentTransactions.forEach(function (transaction) {
+    const row = document.createElement('tr');
+    const dateCell = document.createElement('td');
+    const parsedDate = new Date(transaction.timestamp);
+    dateCell.textContent = Number.isNaN(parsedDate.getTime()) ? '' : parsedDate.toLocaleDateString();
+    row.appendChild(dateCell);
+
+    const sideCell = document.createElement('td');
+    sideCell.textContent = transaction.side === 'buy' ? 'Buy' : 'Sell';
+    row.appendChild(sideCell);
+
+    const holdingCell = document.createElement('td');
+    holdingCell.textContent = transaction.ticker + ' | ' + transaction.name;
+    row.appendChild(holdingCell);
+
+    const unitsCell = document.createElement('td');
+    unitsCell.textContent = num(transaction.units, 0).toLocaleString('en-US', { maximumFractionDigits: 8 });
+    row.appendChild(unitsCell);
+
+    const priceCell = document.createElement('td');
+    priceCell.textContent = peso(transaction.pricePHP, 2);
+    row.appendChild(priceCell);
+
+    const feesCell = document.createElement('td');
+    feesCell.textContent = peso(transaction.feesPHP, 2);
+    row.appendChild(feesCell);
+
+    const resultCell = document.createElement('td');
+    if (transaction.side === 'sell') {
+      const realizedGain = num(transaction.realizedGainPHP, 0);
+      resultCell.textContent = (realizedGain > 0 ? '+' : '') + peso(realizedGain, 2);
+      resultCell.className = realizedGain >= 0 ? 'up' : 'down';
+    } else {
+      resultCell.textContent = '—';
+    }
+    row.appendChild(resultCell);
+    rowsNode.appendChild(row);
+  });
+}
+
+function isQuickUpdateValueInvalid(value) {
+  return value === '' || !Number.isFinite(Number(value)) || Number(value) < 0;
+}
+
+function getQuickUpdateMarketValue(position, draft) {
+  const preview = Object.assign({}, position);
+  ['units', 'currentPrice'].forEach(function (field) {
+    if (Object.prototype.hasOwnProperty.call(draft, field)) {
+      preview[field] = num(draft[field], position[field]);
+    }
+  });
+  return positionValuePHP(preview);
+}
+
+function updateQuickUpdateDraft(position, field, value, input, row) {
+  let draft = quickUpdateDrafts.get(position) || {};
+  const unchanged = value !== '' && Number.isFinite(Number(value)) && Number(value) === num(position[field], 0);
+  if (unchanged) {
+    delete draft[field];
+  } else {
+    draft[field] = value;
+  }
+
+  if (Object.keys(draft).length) {
+    quickUpdateDrafts.set(position, draft);
+  } else {
+    quickUpdateDrafts.delete(position);
+  }
+
+  input.setAttribute('aria-invalid', String(isQuickUpdateValueInvalid(value)));
+  const valueNode = row.querySelector('.quick-update-value');
+  if (valueNode) {
+    valueNode.textContent = peso(getQuickUpdateMarketValue(position, draft));
+  }
+  refreshQuickUpdateStatus();
+  renderQuickTransactionPreview();
+}
+
+function filterQuickUpdateRows(value) {
+  quickUpdateFilter = value.trim().toLowerCase();
+  const rows = document.querySelectorAll('.quick-update-row');
+  let visibleCount = 0;
+  rows.forEach(function (row) {
+    row.hidden = quickUpdateFilter && row.dataset.search.indexOf(quickUpdateFilter) < 0;
+    if (!row.hidden) {
+      visibleCount += 1;
+    }
+  });
+
+  const emptyNode = el('quickUpdateEmpty');
+  const noResultsNode = el('quickUpdateNoResults');
+  if (emptyNode) {
+    emptyNode.style.display = rows.length ? 'none' : 'block';
+  }
+  if (noResultsNode) {
+    noResultsNode.style.display = rows.length && !visibleCount ? 'block' : 'none';
+  }
+}
+
+function refreshQuickUpdateStatus() {
+  const statusNode = el('quickUpdateStatus');
+  const saveButton = el('quickUpdateSave');
+  let hasInvalidValue = false;
+  quickUpdateDrafts.forEach(function (draft) {
+    Object.keys(draft).forEach(function (field) {
+      if (isQuickUpdateValueInvalid(draft[field])) {
+        hasInvalidValue = true;
+      }
+    });
+  });
+
+  const count = quickUpdateDrafts.size;
+  if (statusNode) {
+    statusNode.textContent = count
+      ? count + ' holding' + (count === 1 ? '' : 's') + (hasInvalidValue ? ' need valid nonnegative values.' : ' ready to save.')
+      : 'No pending changes.';
+  }
+  if (saveButton) {
+    saveButton.disabled = !count || hasInvalidValue;
+  }
+}
+
+function saveQuickUpdates() {
+  let hasInvalidValue = false;
+  quickUpdateDrafts.forEach(function (draft) {
+    Object.keys(draft).forEach(function (field) {
+      if (isQuickUpdateValueInvalid(draft[field])) {
+        hasInvalidValue = true;
+      }
+    });
+  });
+  if (hasInvalidValue || !quickUpdateDrafts.size) {
+    refreshQuickUpdateStatus();
+    return;
+  }
+
+  let updatedCount = 0;
+  quickUpdateDrafts.forEach(function (draft, position) {
+    if (S.positions.indexOf(position) < 0) {
+      return;
+    }
+    Object.keys(draft).forEach(function (field) {
+      setPositionField(position, field, Number(draft[field]));
+    });
+    updatedCount += 1;
+  });
+
+  quickUpdateDrafts.clear();
+  save();
+  renderAll();
+  toast('Updated ' + updatedCount + ' holding' + (updatedCount === 1 ? '.' : 's.'));
 }
 
 function setTargetFromExpense(id) {
@@ -1400,12 +1817,27 @@ function additionalCapitalAtTargetPrice(position, additionalAnnualNeeded, target
 
 function renderDividend() {
   const targetNode = el('divTarget');
+  const desiredYieldNode = el('divDesiredYield');
   const targetMonthlyDefault = currentIncomeTargetAnnual() / 12;
   if (targetNode && !targetNode.value) {
     targetNode.value = Math.round(targetMonthlyDefault);
   }
 
-  const desiredYield = (num((el('divDesiredYield') || {}).value, 7)) / 100;
+  const defaultYieldPct = num(S.profile.defaultNetYield, 0.07) * 100;
+  if (desiredYieldNode) {
+    if (desiredYieldNode.dataset.customized !== 'true') {
+      desiredYieldNode.value = defaultYieldPct.toFixed(1);
+    }
+    desiredYieldNode.oninput = function () {
+      if (desiredYieldNode.value === '') {
+        delete desiredYieldNode.dataset.customized;
+      } else {
+        desiredYieldNode.dataset.customized = 'true';
+      }
+      renderDividend();
+    };
+  }
+  const desiredYield = num((desiredYieldNode || {}).value, defaultYieldPct) / 100;
   const targetMonthly = num((el('divTarget') || {}).value, targetMonthlyDefault);
   const targetAnnual = targetMonthly * 12;
   const plannerTotals = getIncomeBucketTotals();
@@ -2198,6 +2630,20 @@ function updatePos(index, field, value) {
     return;
   }
 
+  const draft = quickUpdateDrafts.get(position);
+  if (draft && Object.prototype.hasOwnProperty.call(draft, field)) {
+    delete draft[field];
+    if (!Object.keys(draft).length) {
+      quickUpdateDrafts.delete(position);
+    }
+  }
+
+  setPositionField(position, field, value);
+  save();
+  renderAll();
+}
+
+function setPositionField(position, field, value) {
   if (field === 'isIlliquid') {
     position.isIlliquid = value;
   } else if (field === 'name' || field === 'bucket' || field === 'currency') {
@@ -2214,9 +2660,6 @@ function updatePos(index, field, value) {
   if (field === 'div') {
     position.lu.div = todayISO();
   }
-
-  save();
-  renderAll();
 }
 
 function delPos(index) {
@@ -2342,6 +2785,7 @@ function importJSON(file) {
 /* ===== init ===== */
 window.addEventListener('DOMContentLoaded', function () {
   load();
+  loadQuickTransactionHistory();
   applyTheme(S.ui.theme, false);
 
   const themeToggle = el('themeToggle');

@@ -76,6 +76,34 @@ label{display:block;font-size:.78rem;color:var(--muted);font-weight:600;margin-b
 .toolbtn.sel{background:linear-gradient(120deg,var(--primary2),var(--primary));color:#fff;border-color:transparent;box-shadow:var(--shadow-sm)}
 .tool{display:none}
 .tool.active{display:block}
+.quick-update-heading { align-items:center; justify-content:space-between; gap:12px; }
+.quick-update-heading h3 { margin:0; }
+.quick-update-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0; }
+.quick-update-toolbar input { width:min(100%, 340px); }
+.quick-update-toolbar p { margin:0; }
+.quick-update-table-wrap { width:100%; overflow-x:auto; }
+.quick-update-table { min-width:680px; }
+.quick-update-table td { vertical-align:middle; }
+.quick-update-table input { width:100%; min-width:105px; margin:0; }
+.quick-update-holding { display:flex; flex-direction:column; min-width:150px; }
+.quick-update-holding span { color:var(--muted); font-size:.82rem; }
+.quick-update-table .quick-update-value { white-space:nowrap; }
+.quick-update-table input[aria-invalid="true"] { border-color:var(--bad); }
+.quick-transaction { padding:14px 0; margin-bottom:14px; border-bottom:1px solid var(--line); }
+.quick-transaction h4 { margin:0 0 4px; }
+.quick-transaction > .note { margin:0; }
+.quick-transaction-form { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; align-items:end; margin-top:12px; }
+.quick-trade-holding { grid-column:span 2; }
+.quick-transaction-form .field { min-width:0; margin:0; }
+.quick-transaction-form input,.quick-transaction-form select { width:100%; min-width:0; }
+.quick-transaction-form > button { grid-column:1/-1; justify-self:start; }
+.quick-transaction-preview { margin:10px 0 0; }
+.quick-transaction-preview.is-invalid { color:var(--bad); }
+.quick-transaction-history { margin:12px 0; }
+.quick-transaction-history summary { cursor:pointer; font-weight:700; }
+.quick-transaction-table { min-width:620px; margin-top:8px; }
+.quick-transaction-table .up { color:var(--good); font-weight:700; }
+.quick-transaction-table .down { color:var(--bad); font-weight:700; }
 .chartwrap{position:relative;height:300px}
 canvas{max-height:300px}
 .legend{list-style:none;padding:0;margin:12px 0 0}
@@ -592,6 +620,7 @@ html[data-theme="light"] .poscard.b-Stability { background:linear-gradient(180de
 html[data-theme="light"] .poscard.b-Insurance { background:linear-gradient(180deg,rgba(173,154,203,.12),#fffefa); }
 
 @media(max-width:760px){ .theme-label{display:none}.theme-toggle{width:42px;justify-content:center;padding:0}.movers-grid{grid-template-columns:1fr}.mover-row > div:first-child span{max-width:170px} }
+@media(max-width:760px){ .quick-update-heading{align-items:flex-start;flex-direction:column}.quick-update-heading .btn{align-self:flex-start}.quick-update-toolbar{align-items:stretch;flex-direction:column}.quick-update-toolbar input{width:100%}.quick-transaction-form{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-trade-holding{grid-column:1/-1}.quick-transaction-form > button{grid-column:1/-1} }
 
 /* =========================================================
    PerFi premium color emphasis and fluid chart sizing
