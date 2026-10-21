@@ -6,6 +6,9 @@ let charts = {};
 let quickUpdateDrafts = new Map();
 let quickUpdateFilter = '';
 let quickTransactionHistory = [];
+let quickTradeBatches = new Map();
+let quickTradeEditing = null;
+const expandedHoldingPanels = new WeakSet();
 const LEGEND_PALETTE = [
   '#0e7d8b',
   '#17c3b2',
@@ -355,11 +358,12 @@ function nonInsurancePositions() {
 }
 
 function allocationPositions() {
-  return orderedPositionsWithIndex().map(function (item) {
-    return item.position;
-  }).filter(function (position) {
+  const positions = S.positions.filter(function (position) {
     const excludeIlliquid = S.ui.excludeIlliquidCharts && position.isIlliquid;
     return !excludeIlliquid;
+  });
+  return orderedPositionsWithIndex(positions).map(function (item) {
+    return item.position;
   });
 }
 
@@ -745,13 +749,28 @@ function showTool(name) {
 /* ===== view preferences and display metrics ===== */
 const HOLDING_BUCKET_ORDER = { Income: 0, Growth: 1, Stability: 2, Insurance: 3 };
 
-function orderedPositionsWithIndex() {
+function orderedBuckets(positions, includedBuckets) {
+  const values = {};
+  (includedBuckets || []).forEach(function (bucket) { values[bucket] = 0; });
+  positions.forEach(function (position) {
+    values[position.bucket] = (values[position.bucket] || 0) + valuePHP(position);
+  });
+  return Object.keys(values).sort(function (first, second) {
+    return values[second] - values[first] || num(HOLDING_BUCKET_ORDER[first], 99) - num(HOLDING_BUCKET_ORDER[second], 99);
+  });
+}
+
+function orderedPositionsWithIndex(positions) {
+  const selectedPositions = positions || S.positions;
+  const bucketOrder = orderedBuckets(selectedPositions);
   return S.positions.map(function (position, index) {
     return { position: position, index: index };
+  }).filter(function (item) {
+    return selectedPositions.includes(item.position);
   }).sort(function (a, b) {
-    const bucketDifference = num(HOLDING_BUCKET_ORDER[a.position.bucket], 99) - num(HOLDING_BUCKET_ORDER[b.position.bucket], 99);
-    const investmentDifference = num(b.position.invested, 0) - num(a.position.invested, 0);
-    return bucketDifference || investmentDifference || (a.index - b.index);
+    const bucketDifference = bucketOrder.indexOf(a.position.bucket) - bucketOrder.indexOf(b.position.bucket);
+    const valueDifference = valuePHP(b.position) - valuePHP(a.position);
+    return bucketDifference || valueDifference || (a.index - b.index);
   });
 }
 
@@ -1054,7 +1073,7 @@ function drawBucket() {
   });
 
   const items = shareList(
-    Object.keys(grouped).map(function (bucket) {
+    orderedBuckets(allocationPositions()).map(function (bucket) {
       return { label: bucket, v: grouped[bucket] };
     }),
     function (item) {
@@ -1382,6 +1401,9 @@ function renderQuickUpdate() {
       quickUpdateDrafts.delete(position);
     }
   });
+  quickTradeBatches.forEach(function (_, position) {
+    if (S.positions.indexOf(position) < 0) quickTradeBatches.delete(position);
+  });
 
   searchNode.value = quickUpdateFilter;
   searchNode.oninput = function () {
@@ -1428,6 +1450,7 @@ function renderQuickUpdate() {
         : position[column.field];
       input.setAttribute('aria-label', position.ticker + ' ' + column.label);
       input.dataset.field = column.field;
+      input.readOnly = quickTradeBatches.has(position) && column.field !== 'currentPrice';
       input.setAttribute('aria-invalid', String(isQuickUpdateValueInvalid(input.value)));
       input.addEventListener('input', function () {
         updateQuickUpdateDraft(position, column.field, input.value, input, row);
@@ -1454,9 +1477,8 @@ function renderQuickTransactionForm() {
   const holdingNode = el('quickTradeHolding');
   const sideNode = el('quickTradeSide');
   const unitsNode = el('quickTradeUnits');
-  const priceNode = el('quickTradePrice');
-  const feesNode = el('quickTradeFees');
-  if (!holdingNode || !sideNode || !unitsNode || !priceNode || !feesNode) {
+  const totalNode = el('quickTradeTotal');
+  if (!holdingNode || !sideNode || !unitsNode || !totalNode) {
     return;
   }
 
@@ -1476,16 +1498,15 @@ function renderQuickTransactionForm() {
   holdingNode.value = selectionExists ? selectedValue : (holdings.length ? String(holdings[0].index) : '');
 
   const hasHoldings = holdings.length > 0;
-  holdingNode.disabled = !hasHoldings;
+  holdingNode.disabled = !hasHoldings || !!quickTradeEditing;
   sideNode.disabled = !hasHoldings;
   unitsNode.disabled = !hasHoldings;
-  priceNode.disabled = !hasHoldings;
-  feesNode.disabled = !hasHoldings;
+  totalNode.disabled = !hasHoldings;
   holdingNode.onchange = renderQuickTransactionForm;
   sideNode.onchange = renderQuickTransactionPreview;
   unitsNode.oninput = renderQuickTransactionPreview;
-  priceNode.oninput = renderQuickTransactionPreview;
-  feesNode.oninput = renderQuickTransactionPreview;
+  totalNode.oninput = renderQuickTransactionPreview;
+  el('quickTradeCancel').hidden = !quickTradeEditing;
   renderQuickTransactionPreview();
 }
 
@@ -1493,11 +1514,9 @@ function calculateQuickTransaction() {
   const position = S.positions[Number((el('quickTradeHolding') || {}).value)];
   const side = (el('quickTradeSide') || {}).value;
   const unitsRaw = (el('quickTradeUnits') || {}).value;
-  const priceRaw = (el('quickTradePrice') || {}).value;
-  const feesRaw = (el('quickTradeFees') || {}).value;
+  const totalRaw = (el('quickTradeTotal') || {}).value;
   const units = Number(unitsRaw);
-  const price = Number(priceRaw);
-  const fees = Number(feesRaw);
+  const total = Number(totalRaw);
 
   function invalid(message) {
     return { valid: false, message: message };
@@ -1506,30 +1525,42 @@ function calculateQuickTransaction() {
   if (!position) {
     return invalid('Add a holding before recording a transaction.');
   }
-  if (quickUpdateDrafts.has(position)) {
-    return invalid('Save or reset this holding’s pending Quick Update edits first.');
-  }
   if (side !== 'buy' && side !== 'sell') {
     return invalid('Choose Buy or Sell.');
   }
   if (unitsRaw === '' || !Number.isFinite(units) || units <= 0) {
     return invalid('Enter a transaction quantity greater than zero.');
   }
-  if (priceRaw === '' || !Number.isFinite(price) || price <= 0) {
-    return invalid('Enter a price greater than zero.');
-  }
-  if (feesRaw === '' || !Number.isFinite(fees) || fees < 0) {
-    return invalid('Enter fees of zero or more.');
+  if (totalRaw === '' || !Number.isFinite(total) || total <= 0) {
+    return invalid('Enter a total amount greater than zero.');
   }
 
-  const currentUnits = num(position.units, 0);
-  const currentInvested = Math.max(0, num(position.invested, 0));
-  const tradeGross = units * price;
-  if (side === 'sell' && units > currentUnits) {
-    return invalid('You cannot sell more units than this holding contains.');
+  const draft = quickUpdateDrafts.get(position) || {};
+  const batch = quickTradeBatches.get(position);
+  let balance = Object.assign({}, position, draft);
+  if (quickTradeEditing && batch) {
+    balance = batch.base;
+    for (const entry of batch.entries) {
+      if (entry.id === quickTradeEditing) break;
+      const previous = applyQuickTrade(balance, entry);
+      if (!previous.valid) return previous;
+      balance = { units: previous.unitsAfter, invested: previous.investedAfterPHP };
+    }
   }
-  if (side === 'sell' && fees > tradeGross) {
-    return invalid('Fees cannot exceed the sale value.');
+  const result = applyQuickTrade(balance, { side: side, units: units, cashFlowPHP: total });
+  return Object.assign(result, { position: position, side: side, units: units, cashFlowPHP: total });
+}
+
+function applyQuickTrade(balance, trade) {
+  const currentUnits = Number(balance.units);
+  const currentInvested = Number(balance.invested);
+  const units = Number(trade.units);
+  const side = trade.side;
+  if (![currentUnits, currentInvested, units, trade.cashFlowPHP].every(Number.isFinite) || currentUnits < 0 || currentInvested < 0) {
+    return { valid: false, message: 'Correct the holding balances before recording a trade.' };
+  }
+  if (side === 'sell' && units > currentUnits) {
+    return { valid: false, message: 'You cannot sell more units than this holding contains.' };
   }
 
   const unitsAfter = side === 'buy'
@@ -1538,20 +1569,13 @@ function calculateQuickTransaction() {
   const costBasisRemovedPHP = side === 'sell' && currentUnits
     ? currentInvested * (units / currentUnits)
     : 0;
-  const cashFlowPHP = side === 'buy'
-    ? tradeGross + fees
-    : tradeGross - fees;
+  const cashFlowPHP = trade.cashFlowPHP;
   const investedAfterPHP = side === 'buy'
     ? currentInvested + cashFlowPHP
     : (unitsAfter === 0 ? 0 : Math.max(0, currentInvested - costBasisRemovedPHP));
 
   return {
     valid: true,
-    position: position,
-    side: side,
-    units: units,
-    price: price,
-    fees: fees,
     unitsAfter: unitsAfter,
     cashFlowPHP: cashFlowPHP,
     investedAfterPHP: investedAfterPHP,
@@ -1568,8 +1592,10 @@ function renderQuickTransactionPreview() {
   }
 
   const unitsValue = (el('quickTradeUnits') || {}).value;
-  const priceValue = (el('quickTradePrice') || {}).value;
-  if (!unitsValue && !priceValue) {
+  const totalValue = (el('quickTradeTotal') || {}).value;
+  setText('quickTradeTotalLabel', el('quickTradeSide').value === 'buy' ? 'Total paid (PHP)' : 'Total received (PHP)');
+  submitNode.textContent = quickTradeEditing ? 'Update transaction' : 'Record transaction';
+  if (!unitsValue && !totalValue) {
     previewNode.className = 'note quick-transaction-preview';
     previewNode.textContent = 'Choose a holding and enter transaction details.';
     submitNode.disabled = true;
@@ -1602,31 +1628,88 @@ function recordQuickTransaction(event) {
   }
 
   const position = calculation.position;
-  setPositionField(position, 'units', calculation.unitsAfter);
-  setPositionField(position, 'invested', calculation.investedAfterPHP);
-  quickTransactionHistory.unshift({
+  const draft = quickUpdateDrafts.get(position) || {};
+  const batch = quickTradeBatches.get(position) || {
+    base: { units: Number(draft.units ?? position.units), invested: Number(draft.invested ?? position.invested) },
+    entries: []
+  };
+  const entry = {
+    id: quickTradeEditing || Date.now().toString(36) + Math.random().toString(36).slice(2),
     timestamp: new Date().toISOString(),
     ticker: position.ticker,
     name: position.name,
+    currency: position.currency,
     side: calculation.side,
     units: calculation.units,
-    pricePHP: calculation.price,
-    feesPHP: calculation.fees,
-    cashFlowPHP: calculation.cashFlowPHP,
-    costBasisRemovedPHP: calculation.costBasisRemovedPHP,
-    realizedGainPHP: calculation.realizedGainPHP,
-    unitsAfter: calculation.unitsAfter,
-    investedAfterPHP: calculation.investedAfterPHP
-  });
-  quickTransactionHistory = quickTransactionHistory.slice(0, 8);
-  saveQuickTransactionHistory();
+    cashFlowPHP: calculation.cashFlowPHP
+  };
+  const entries = batch.entries.slice();
+  const editingIndex = entries.findIndex(function (item) { return item.id === quickTradeEditing; });
+  if (editingIndex >= 0) entries[editingIndex] = Object.assign({}, entries[editingIndex], entry);
+  else entries.push(entry);
+  let balance = batch.base;
+  const updatedEntries = [];
+  for (const item of entries) {
+    const result = applyQuickTrade(balance, item);
+    if (!result.valid) {
+      setText('quickTradePreview', result.message + ' Check subsequent trades.');
+      return;
+    }
+    updatedEntries.push(Object.assign({}, item, result, { beforeUnits: balance.units, beforeInvestedPHP: balance.invested }));
+    balance = { units: result.unitsAfter, invested: result.investedAfterPHP };
+  }
+  quickTradeBatches.set(position, { base: batch.base, entries: updatedEntries });
+  quickUpdateDrafts.set(position, Object.assign({}, draft, balance));
+  resetQuickTradeForm();
+  renderQuickUpdate();
+  el('quickTransactionHistory').open = true;
+  toast('Transaction staged. Save updates to commit.');
+}
 
+function resetQuickTradeForm() {
+  quickTradeBatches.forEach(function (_, position) {
+    if (!quickUpdateDrafts.has(position)) quickTradeBatches.delete(position);
+  });
+  quickTradeEditing = null;
   el('quickTradeUnits').value = '';
-  el('quickTradePrice').value = '';
-  el('quickTradeFees').value = '0';
-  save();
-  renderAll();
-  toast((calculation.side === 'buy' ? 'Buy' : 'Sell') + ' recorded for ' + position.ticker + '.');
+  el('quickTradeTotal').value = '';
+  renderQuickTransactionForm();
+}
+
+function getQuickTransactionEntries() {
+  const pending = [];
+  const replaced = new Set();
+  quickTradeBatches.forEach(function (batch) {
+    batch.entries.forEach(function (entry) { pending.push(entry); replaced.add(entry.id); });
+  });
+  return pending.reverse().concat(quickTransactionHistory.filter(function (entry) { return !replaced.has(entry.id); }));
+}
+
+function editQuickTransaction(id) {
+  const entry = getQuickTransactionEntries().find(function (item) { return item.id === id; });
+  if (!entry) return;
+  const matches = S.positions.filter(function (position) {
+    return position.ticker === entry.ticker && position.name === entry.name && position.currency === entry.currency;
+  });
+  if (matches.length !== 1) { toast('The original holding cannot be identified uniquely.'); return; }
+  const position = matches[0];
+  if (!quickTradeBatches.has(position)) {
+    const entries = quickTransactionHistory.slice(0, quickTransactionHistory.indexOf(entry) + 1).reverse().filter(function (item) {
+      return item.ticker === entry.ticker && item.name === entry.name && item.currency === entry.currency;
+    });
+    const latest = entries[entries.length - 1];
+    if (quickUpdateDrafts.has(position) || position.units !== latest.unitsAfter || position.invested !== latest.investedAfterPHP) {
+      toast('Holding balances changed since this trade. Correct them directly in Quick Update.'); return;
+    }
+    quickTradeBatches.set(position, { base: { units: entry.beforeUnits, invested: entry.beforeInvestedPHP }, entries: entries });
+  }
+  quickTradeEditing = id;
+  el('quickTradeHolding').value = S.positions.indexOf(position);
+  el('quickTradeSide').value = entry.side;
+  el('quickTradeUnits').value = entry.units;
+  el('quickTradeTotal').value = entry.cashFlowPHP;
+  renderQuickTransactionForm();
+  el('quickTradeUnits').focus();
 }
 
 function renderQuickTransactionHistory() {
@@ -1636,7 +1719,7 @@ function renderQuickTransactionHistory() {
     return;
   }
 
-  const recentTransactions = quickTransactionHistory;
+  const recentTransactions = getQuickTransactionEntries();
   section.style.display = recentTransactions.length ? 'block' : 'none';
   rowsNode.innerHTML = '';
   recentTransactions.forEach(function (transaction) {
@@ -1658,13 +1741,9 @@ function renderQuickTransactionHistory() {
     unitsCell.textContent = num(transaction.units, 0).toLocaleString('en-US', { maximumFractionDigits: 8 });
     row.appendChild(unitsCell);
 
-    const priceCell = document.createElement('td');
-    priceCell.textContent = peso(transaction.pricePHP, 2);
-    row.appendChild(priceCell);
-
-    const feesCell = document.createElement('td');
-    feesCell.textContent = peso(transaction.feesPHP, 2);
-    row.appendChild(feesCell);
+    const totalCell = document.createElement('td');
+    totalCell.textContent = peso(transaction.cashFlowPHP, 2);
+    row.appendChild(totalCell);
 
     const resultCell = document.createElement('td');
     if (transaction.side === 'sell') {
@@ -1675,6 +1754,19 @@ function renderQuickTransactionHistory() {
       resultCell.textContent = '—';
     }
     row.appendChild(resultCell);
+    const editCell = document.createElement('td');
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.className = 'btn alt';
+    editButton.textContent = 'Edit';
+    editButton.title = 'Edit transaction';
+    editButton.disabled = !transaction.id;
+    editButton.onclick = function () { editQuickTransaction(transaction.id); };
+    editCell.appendChild(editButton);
+    row.appendChild(editCell);
+    const statusCell = document.createElement('td');
+    statusCell.textContent = quickTransactionHistory.includes(transaction) ? 'Saved' : 'Pending';
+    row.appendChild(statusCell);
     rowsNode.appendChild(row);
   });
 }
@@ -1787,6 +1879,10 @@ function saveQuickUpdates() {
   });
 
   quickUpdateDrafts.clear();
+  quickTransactionHistory = getQuickTransactionEntries().slice(0, 8);
+  quickTradeBatches.clear();
+  saveQuickTransactionHistory();
+  resetQuickTradeForm();
   save();
   renderAll();
   toast('Updated ' + updatedCount + ' holding' + (updatedCount === 1 ? '.' : 's.'));
@@ -1850,10 +1946,8 @@ function renderDividend() {
   setText('plannerYoc', pct(plannerTotals.yieldOnCost, 2));
   setText('divResult', '');
 
-  const rows = incomeBucketPayers().slice().sort(function (a, b) {
-    const aYield = valuePHP(a) ? (incomePHP(a) / valuePHP(a)) : 0;
-    const bYield = valuePHP(b) ? (incomePHP(b) / valuePHP(b)) : 0;
-    return bYield - aYield;
+  const rows = orderedPositionsWithIndex(incomeBucketPayers()).map(function (item) {
+    return item.position;
   }).map(function (position) {
     const currentValue = valuePHP(position);
     const netYield = currentValue ? (incomePHP(position) / currentValue) : 0;
@@ -1907,7 +2001,9 @@ function bucketTargetsForMode() {
 }
 
 function withinBucketWeights(bucket) {
-  const holdings = nonInsurancePositions().filter(function (position) {
+  const holdings = orderedPositionsWithIndex(nonInsurancePositions()).map(function (item) {
+    return item.position;
+  }).filter(function (position) {
     return position.bucket === bucket;
   });
   const bucketValue = holdings.reduce(function (sum, position) {
@@ -1928,7 +2024,7 @@ function renderRebalance() {
     return;
   }
 
-  const buckets = ['Growth', 'Income', 'Stability'];
+  const buckets = orderedBuckets(nonInsurancePositions(), ['Growth', 'Income', 'Stability']);
   const bucketTargets = bucketTargetsForMode();
   let html = '';
 
@@ -2610,7 +2706,8 @@ function renderPosCards() {
       return '<input ' + (type ? 'type="' + type + '" ' : '') + 'value="' + value + '" onchange="updatePos(' + index + ',\'' + field + '\',this.value)">';
     }
 
-    return '<div class="poscard b-' + position.bucket + '"><h4><span>' + position.ticker + '</span><button class="btn danger" style="padding:2px 10px" onclick="delPos(' + index + ')">&times;</button></h4>' +
+    return '<details class="poscard b-' + position.bucket + '" data-position-index="' + index + '"' + (expandedHoldingPanels.has(position) ? ' open' : '') + '><summary>' + position.ticker + ' <span class="note">' + position.bucket + '</span></summary>' +
+      '<div class="holding-panel-content"><button class="btn danger" type="button" style="padding:2px 10px" onclick="delPos(' + index + ')">Delete holding</button>' +
       '<div class="pf"><label>Name</label>' + input('name', position.name) + '</div>' +
       '<div class="pf"><label>Bucket</label>' + select('bucket', buckets, position.bucket) + '</div>' +
       '<div class="pf"><label>Currency</label>' + select('currency', currencies, position.currency) + '</div>' +
@@ -2620,8 +2717,16 @@ function renderPosCards() {
       '<div class="pf"><label>Dividend tax override (blank = default)</label>' + input('divTaxOverride', (position.divTaxOverride == null ? '' : position.divTaxOverride), 'number') + '</div>' +
       '<div class="pf"><label>Invested (₱ cost basis)</label>' + input('invested', position.invested, 'number') + '</div>' +
       '<div class="pf"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" ' + (position.isIlliquid ? 'checked' : '') + ' onchange="updatePos(' + index + ',\'isIlliquid\',this.checked)"> Illiquid</label></div>' +
-      '</div>';
+      '</div></details>';
   }).join('');
+  box.querySelectorAll('details.poscard').forEach(function (panel) {
+    const position = S.positions[Number(panel.dataset.positionIndex)];
+    panel.addEventListener('toggle', function () {
+      if (!panel.isConnected) return;
+      if (panel.open) expandedHoldingPanels.add(position);
+      else expandedHoldingPanels.delete(position);
+    });
+  });
 }
 
 function updatePos(index, field, value) {
@@ -2630,6 +2735,15 @@ function updatePos(index, field, value) {
     return;
   }
 
+  if (quickTradeBatches.has(position) && (field === 'units' || field === 'invested')) {
+    quickTradeBatches.delete(position);
+    const pending = quickUpdateDrafts.get(position);
+    if (pending) {
+      delete pending.units;
+      delete pending.invested;
+    }
+    quickTradeEditing = null;
+  }
   const draft = quickUpdateDrafts.get(position);
   if (draft && Object.prototype.hasOwnProperty.call(draft, field)) {
     delete draft[field];

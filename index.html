@@ -357,14 +357,14 @@
         </div>
         <section class="quick-transaction">
           <h4>Record a trade</h4>
-          <p class="note">Enter price and fees in PHP for every holding. Sells remove units at average cost basis; trade entries stay in this browser session and are not included in JSON backups.</p>
+          <p class="note">Total paid includes fees; total received is net of fees. Sells use average cost basis.</p>
           <form id="quickTradeForm" class="quick-transaction-form" onsubmit="recordQuickTransaction(event)">
             <div class="field quick-trade-holding"><label for="quickTradeHolding">Holding</label><select id="quickTradeHolding" required></select></div>
             <div class="field"><label for="quickTradeSide">Action</label><select id="quickTradeSide"><option value="buy">Buy</option><option value="sell">Sell</option></select></div>
             <div class="field"><label for="quickTradeUnits">Units</label><input id="quickTradeUnits" type="number" min="0.00000001" step="any" inputmode="decimal" required></div>
-            <div class="field"><label for="quickTradePrice">Price per unit (PHP)</label><input id="quickTradePrice" type="number" min="0.00000001" step="any" inputmode="decimal" required></div>
-            <div class="field"><label for="quickTradeFees">Fees (PHP)</label><input id="quickTradeFees" type="number" min="0" step="any" inputmode="decimal" value="0" required></div>
+            <div class="field"><label id="quickTradeTotalLabel" for="quickTradeTotal">Total paid (PHP)</label><input id="quickTradeTotal" type="number" min="0.01" step="any" inputmode="decimal" required></div>
             <button id="quickTradeSubmit" class="btn" type="submit" disabled>Record transaction</button>
+            <button id="quickTradeCancel" class="btn alt" type="button" onclick="resetQuickTradeForm()" hidden>Cancel edit</button>
           </form>
           <p id="quickTradePreview" class="note quick-transaction-preview" aria-live="polite">Choose a holding and enter transaction details.</p>
         </section>
@@ -372,7 +372,7 @@
           <summary>Recent transactions</summary>
           <div class="quick-update-table-wrap">
             <table class="quick-transaction-table">
-              <thead><tr><th>Date</th><th>Action</th><th>Holding</th><th>Units</th><th>Price (PHP)</th><th>Fees (PHP)</th><th>Realized P/L</th></tr></thead>
+              <thead><tr><th>Date</th><th>Action</th><th>Holding</th><th>Units</th><th>Total paid/received (PHP)</th><th>Realized P/L</th><th></th><th>Status</th></tr></thead>
               <tbody id="quickTransactionRows"></tbody>
             </table>
           </div>
@@ -404,8 +404,8 @@
     <section id="tab-data" class="tab">
       <div class="card">
         <h3>Profile &amp; Goals</h3>
-        <div class="settings-group">
-          <h4>Timeline & spending</h4>
+        <details class="settings-group">
+          <summary>Timeline &amp; spending</summary>
           <div class="grid cols-3">
             <div class="field"><label>Current age</label><input id="pfAge"></div>
             <div class="field"><label>Retire age</label><input id="pfRetire"></div>
@@ -413,9 +413,9 @@
             <div class="field"><label>Withdrawal multiple</label><input id="pfMult"></div>
             <div class="field"><label>Income coverage target (% of spending)</label><input id="pfIncomePct"><button class="btn alt" style="margin-top:6px" onclick="showTab('tools');showTool('dividend');setTargetFromExpense('divTarget')">Preview in Planner</button></div>
           </div>
-        </div>
-        <div class="settings-group">
-          <h4>Contribution profile</h4>
+        </details>
+        <details class="settings-group">
+          <summary>Contribution profile</summary>
           <p class="note">Bucket percentages define how much of the monthly contribution is counted by bucket. Coast Projector selected buckets use their own share only.</p>
           <div class="grid cols-3">
             <div class="field"><label>Monthly contribution (₱)</label><input id="pfMonthly"></div>
@@ -426,9 +426,9 @@
             <div class="field"><label>Stability %</label><input id="pfDefStability"></div>
             <div class="field"><label>Insurance %</label><input id="pfDefInsurance"></div>
           </div>
-        </div>
-        <div class="settings-group">
-          <h4>Return assumptions</h4>
+        </details>
+        <details class="settings-group">
+          <summary>Return assumptions</summary>
           <div class="grid cols-3">
             <div class="field"><label>Real return mode</label><select id="pfReturnMode"><option value="auto">auto</option><option value="manual">manual</option></select></div>
             <div class="field"><label>Manual real return (%)</label><input id="pfReturnManual"></div>
@@ -438,15 +438,15 @@
             <div class="field"><label>Insurance bucket return (%)</label><input id="pfRetInsurance"></div>
           </div>
           <p class="note">Auto mode blends selected bucket returns. Income return is retained for profile completeness but Income is not Coast Projector starting capital.</p>
-        </div>
-        <div class="settings-group">
-          <h4>Income & market data</h4>
+        </details>
+        <details class="settings-group">
+          <summary>Income &amp; market data</summary>
           <div class="grid cols-3">
             <div class="field"><label>Default net yield (%)</label><input id="pfNetYield"></div>
             <div class="field"><label>Domestic dividend tax (%)</label><input id="pfDivTax"></div>
             <div class="field"><label>FX rate (USD→PHP)</label><input id="pfFx"></div>
           </div>
-        </div>
+        </details>
         <button class="btn" onclick="saveProfile()">Save Profile</button>
       </div>
 

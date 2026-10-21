@@ -202,6 +202,11 @@ canvas{max-height:300px}
 
 .settings-group{border:1px solid var(--line);border-radius:16px;padding:16px;margin:14px 0;background:rgba(255,255,255,.72);box-shadow:var(--shadow-sm)}
 .settings-group h4{margin:0 0 10px;color:var(--primary2);font-size:1rem}
+.settings-group > summary,.poscard > summary { cursor:pointer; font-weight:700; color:var(--primary2); overflow-wrap:anywhere; }
+.settings-group[open] > summary { margin-bottom:12px; }
+.poscards { align-items:start; }
+.holding-panel-content { margin-top:14px; }
+.holding-panel-content > button { margin-bottom:12px; }
 
 /* =========================================================
    PerFi Premium OLED Dark Paper Theme
