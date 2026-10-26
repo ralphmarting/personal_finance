@@ -9,6 +9,11 @@ let quickTransactionHistory = [];
 let quickTradeBatches = new Map();
 let quickTradeEditing = null;
 const expandedHoldingPanels = new WeakSet();
+let shareModeEnabled = false;
+const SHARE_MASKED_TEXT_IDS = new Set([
+  'wealthEngineSub', 'coastSub', 'windDownSub', 'netMonthly', 'totalInvested',
+  'currentValue', 'coastTargetMetric', 'nextUp'
+]);
 const LEGEND_PALETTE = [
   '#0e7d8b',
   '#17c3b2',
@@ -39,10 +44,15 @@ function el(id) {
   return document.getElementById(id);
 }
 
+function shareDisplayText(value) {
+  const text = String(value);
+  return shareModeEnabled ? text.replace(/\d/g, '•') : text;
+}
+
 function setText(id, value) {
   const node = el(id);
   if (node) {
-    node.textContent = value;
+    node.textContent = SHARE_MASKED_TEXT_IDS.has(id) ? shareDisplayText(value) : value;
   }
 }
 
@@ -99,6 +109,39 @@ function save() {
   localStorage.setItem(APP_KEY, JSON.stringify(S));
 }
 
+function toggleShareMode() {
+  applyShareMode(!shareModeEnabled, true);
+}
+
+function loadShareMode() {
+  try {
+    shareModeEnabled = sessionStorage.getItem('portfolioShareMode') === 'true';
+  } catch (_) {
+    shareModeEnabled = false;
+  }
+  applyShareMode(shareModeEnabled, false);
+}
+
+function applyShareMode(enabled, remember) {
+  shareModeEnabled = enabled;
+  document.body.classList.toggle('share-mode', enabled);
+  const button = el('shareModeToggle');
+  const label = enabled ? 'Exit Share Mode' : 'Enter Share Mode';
+  if (button) {
+    button.setAttribute('aria-pressed', String(enabled));
+    button.setAttribute('aria-label', label);
+    button.title = label;
+  }
+  if (remember) {
+    try {
+      sessionStorage.setItem('portfolioShareMode', enabled ? 'true' : 'false');
+    } catch (_) {
+      // Share Mode still applies to this page if session storage is unavailable.
+    }
+  }
+  if (el('tab-dashboard')) renderDashboard();
+}
+
 function loadQuickTransactionHistory() {
   try {
     const raw = sessionStorage.getItem(QUICK_TRANSACTION_HISTORY_KEY);
@@ -122,26 +165,35 @@ function toast(message) {
   toastNode.className = 'toast';
   toastNode.textContent = message;
   document.body.appendChild(toastNode);
-  setTimeout(function () {
-    toastNode.remove();
-  }, 4000);
+  setTimeout(function () { toastNode.remove(); }, 4000);
 }
 
 function makeChart(id, config) {
   const node = el(id);
-  if (!node || typeof Chart === 'undefined') {
-    return null;
-  }
-
+  if (!node || typeof Chart === 'undefined') return null;
   if (charts[id]) {
-    try {
-      charts[id].destroy();
-    } catch (_) {
-      // ignore chart destruction errors
-    }
+    try { charts[id].destroy(); } catch (_) { }
   }
-
   try {
+    if (id === 'chartValue') {
+      config.options = config.options || {};
+      config.options.scales = config.options.scales || {};
+      const valueScale = config.options.scales.y || {};
+      config.options.scales.y = Object.assign({}, valueScale, {
+        ticks: Object.assign({}, valueScale.ticks, { display: !shareModeEnabled })
+      });
+    }
+    if (shareModeEnabled) {
+      config.options = config.options || {};
+      config.options.plugins = config.options.plugins || {};
+      config.options.plugins.tooltip = Object.assign({}, config.options.plugins.tooltip, { enabled: false });
+      if (id === 'chartIncome' && config.options.scales && config.options.scales.x) {
+        config.options.scales.x.ticks = Object.assign({}, config.options.scales.x.ticks, { display: false });
+      }
+      if (id === 'chartValue' && config.options.scales && config.options.scales.y) {
+        config.options.scales.y.ticks = Object.assign({}, config.options.scales.y.ticks, { display: false });
+      }
+    }
     charts[id] = new Chart(node, config);
     return charts[id];
   } catch (error) {
@@ -150,7 +202,6 @@ function makeChart(id, config) {
   }
 }
 
-/* ===== defaults and compatibility ===== */
 function seedMilestones() {
   function buildMilestone(category, type, threshold, label, motivator, manual) {
     return {
@@ -859,7 +910,7 @@ function renderBell() {
 
 function buildIncomeFiMessage(yieldOnCost, monthlyIncome) {
   const yocValue = num(yieldOnCost, 0).toFixed(2);
-  const monthlyValue = num(monthlyIncome, 0).toFixed(2).toLocaleString('en-PH');
+  const monthlyValue = num(monthlyIncome, 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const emphasizedYoc = '<span style="font-size:1.5rem;font-weight:700">' + yocValue + '%</span>';
   const emphasizedMonthly = '<span style="font-size:1.5rem;font-weight:700">₱' + monthlyValue + '</span>';
   const messages = [
@@ -934,7 +985,9 @@ function renderDashboard() {
     if (!incomeFiMessageText) {
       incomeFiMessageText = buildIncomeFiMessage(portfolioTotals.yieldOnCost, portfolioTotals.monthlyIncome);
     }
-    incomeFiNode.innerHTML = incomeFiMessageText;
+    incomeFiNode.innerHTML = shareModeEnabled
+      ? incomeFiMessageText.replace(/₱[\d,]+(?:\.\d+)?/g, shareDisplayText)
+      : incomeFiMessageText;
   }
   setText('coastTargetMetric', peso(coastMetrics.coastTarget));
 
@@ -1020,7 +1073,7 @@ function nextUp(portfolioTotals, coastMetrics) {
 
   if (!candidates.length) {
     if (block) {
-      block.textContent = 'All numeric milestones achieved! 🎉';
+      block.textContent = shareDisplayText('All numeric milestones achieved! 🎉');
     }
     if (bar) {
       bar.style.width = '100%';
@@ -1033,7 +1086,7 @@ function nextUp(portfolioTotals, coastMetrics) {
   const needText = peso(remaining);
 
   if (block) {
-    block.textContent = 'Next Up: ' + candidate.milestone.label + ' — ' + needText + ' more to go.';
+    block.textContent = shareDisplayText('Next Up: ' + candidate.milestone.label + ' — ' + needText + ' more to go.');
   }
 
   if (bar) {
@@ -1261,6 +1314,7 @@ function renderMilestones() {
 
   const portfolioTotals = getPortfolioTotals();
   const coastMetrics = coast();
+  let achievedCount = 0;
 
   box.innerHTML = S.milestones.map(function (milestone) {
     let achieved = false;
@@ -1291,6 +1345,7 @@ function renderMilestones() {
     } else if (milestone.type === 'manual') {
       achieved = !!milestone.achieved;
     }
+    if (achieved) achievedCount += 1;
 
     if (milestone.type !== 'manual' && achieved && S.achievedIds.indexOf(milestone.id) < 0) {
       S.achievedIds.push(milestone.id);
@@ -1322,18 +1377,16 @@ function renderMilestones() {
       (milestone.custom ? '<button class="btn ghost" style="margin-top:6px;padding:2px 8px" onclick="delMilestone(\'' + milestone.id + '\')">remove</button>' : '') +
       '</div>';
   }).join('');
+  setText('shareMilestoneSummary', achievedCount + ' of ' + S.milestones.length + ' milestones complete');
 }
 
 function toggleManual(id) {
   const item = S.milestones.find(function (milestone) {
     return milestone.id === id;
   });
-
   if (item) {
     item.achieved = !item.achieved;
-    if (item.achieved) {
-      toast(item.motivator);
-    }
+    if (item.achieved) toast(item.motivator);
     save();
     renderMilestones();
   }
@@ -2900,6 +2953,7 @@ function importJSON(file) {
 window.addEventListener('DOMContentLoaded', function () {
   load();
   loadQuickTransactionHistory();
+  loadShareMode();
   applyTheme(S.ui.theme, false);
 
   const themeToggle = el('themeToggle');

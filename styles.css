@@ -104,6 +104,15 @@ label{display:block;font-size:.78rem;color:var(--muted);font-weight:600;margin-b
 .quick-transaction-table { min-width:620px; margin-top:8px; }
 .quick-transaction-table .up { color:var(--good); font-weight:700; }
 .quick-transaction-table .down { color:var(--bad); font-weight:700; }
+#shareMilestoneSummary { display:none; margin:14px 0 0; }
+.share-mode #nextUpBar { visibility:hidden; }
+.share-mode #tab-dashboard .quest { display:none; }
+.share-mode .growth-movers-card .mover-value b { display:none; }
+.privacy-toggle { width:42px; justify-content:center; padding:0; }
+.privacy-toggle svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.privacy-toggle .share-eye-closed { display:none; }
+.privacy-toggle[aria-pressed="true"] .share-eye-open { display:none; }
+.privacy-toggle[aria-pressed="true"] .share-eye-closed { display:block; }
 .chartwrap{position:relative;height:300px}
 canvas{max-height:300px}
 .legend{list-style:none;padding:0;margin:12px 0 0}
