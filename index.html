@@ -70,7 +70,7 @@
 
       <div class="grid cols-3">
         <div class="metric">
-          <div class="label">Total Portfolio Value</div>
+          <div class="label" id="portfolioMetricLabel">Total Portfolio Value</div>
           <span class="val" id="currentValue">-</span> <span class="val" id="gainPct">-</span>
           <div class="note">Total Invested: <span class="note" id="totalInvested">-</span></div>
         </div>
@@ -86,7 +86,7 @@
         </div>
       </div>
 
-      <div class="card"><b>&#127937; Next Up</b>
+      <div id="nextUpCard" class="card"><b>&#127937; Next Up</b>
         <p id="nextUp" style="margin:8px 0"></p>
         <div class="bar mini"><span id="nextUpBar"></span></div>
       </div>
@@ -126,6 +126,7 @@
       <div class="card">
         <h3>Portfolio Value Over Time</h3>
         <div class="chartwrap dashboard-chart dashboard-chart-wide"><canvas id="chartValue" style="width: 100%; margin: 0 auto;"></canvas></div>
+        <p id="valueShareNote" class="note" style="display:none">Each line is indexed to its first nonzero snapshot (100%).</p>
         <p id="valueEmpty" style="display:none;color:var(--muted)">📸 Start tracking your journey. Save your first
           snapshot and watch your wealth grow over time.</p>
       </div>
@@ -366,8 +367,8 @@
           <form id="quickTradeForm" class="quick-transaction-form" onsubmit="recordQuickTransaction(event)">
             <div class="field quick-trade-holding"><label for="quickTradeHolding">Holding</label><select id="quickTradeHolding" required></select></div>
             <div class="field"><label for="quickTradeSide">Action</label><select id="quickTradeSide"><option value="buy">Buy</option><option value="sell">Sell</option></select></div>
-            <div class="field"><label for="quickTradeUnits">Units</label><input id="quickTradeUnits" type="number" min="0.00000001" step="any" inputmode="decimal" required></div>
-            <div class="field"><label id="quickTradeTotalLabel" for="quickTradeTotal">Total paid (PHP)</label><input id="quickTradeTotal" type="number" min="0.01" step="any" inputmode="decimal" required></div>
+            <div class="field"><label for="quickTradeUnits">Units</label><input id="quickTradeUnits" type="number" min="0.001" step="0.001" inputmode="decimal" required></div>
+            <div class="field"><label id="quickTradeTotalLabel" for="quickTradeTotal">Total paid (PHP)</label><input id="quickTradeTotal" type="number" min="0.01" step="0.01" inputmode="decimal" required></div>
             <button id="quickTradeSubmit" class="btn" type="submit" disabled>Record transaction</button>
             <button id="quickTradeCancel" class="btn alt" type="button" onclick="resetQuickTradeForm()" hidden>Cancel edit</button>
           </form>
@@ -475,11 +476,11 @@
               <option>PHP</option>
               <option>USD</option>
             </select></div>
-          <div class="field"><label>Units</label><input id="apUnits" type="number"></div>
+          <div class="field"><label>Units</label><input id="apUnits" type="number" min="0" step="0.001"></div>
           <div class="field"><label>Current price</label><input id="apPrice" type="number"></div>
           <div class="field"><label>Annual dividend / unit</label><input id="apDiv" type="number"></div>
           <div class="field"><label>Dividend tax override</label><input id="apTax" type="number"></div>
-          <div class="field"><label>Invested (₱)</label><input id="apInvested" type="number"></div>
+          <div class="field"><label>Invested (₱)</label><input id="apInvested" type="number" min="0" step="0.01"></div>
           <div class="field"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="apIlliq">
               Illiquid</label></div>
         </div>

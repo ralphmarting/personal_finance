@@ -12,21 +12,21 @@ const expandedHoldingPanels = new WeakSet();
 let shareModeEnabled = false;
 const SHARE_MASKED_TEXT_IDS = new Set([
   'wealthEngineSub', 'coastSub', 'windDownSub', 'netMonthly', 'totalInvested',
-  'currentValue', 'coastTargetMetric', 'nextUp'
+  'currentValue', 'coastTargetMetric'
 ]);
 const LEGEND_PALETTE = [
-  '#0e7d8b',
-  '#17c3b2',
-  '#0b5a92',
-  '#7b2ff7',
-  '#f107a3',
-  '#f6b93b',
-  '#17a673',
-  '#e08a1e',
-  '#6ec1ff',
-  '#ff8fc4',
-  '#7fe0a1',
-  '#c9a6ff'
+  '#4b9fc2',
+  '#4d9d7c',
+  '#d1a342',
+  '#698ba5',
+  '#bd7063',
+  '#748f63',
+  '#58a5a3',
+  '#ae8151',
+  '#917c9c',
+  '#c1804c',
+  '#7899b8',
+  '#78968a'
 ];
 const CATEGORIES_BY_TYPE = {
   Capital: '💰',
@@ -83,6 +83,20 @@ function num(value, fallback) {
   return Number.isFinite(parsed) ? parsed : (fallback || 0);
 }
 
+function roundToPrecision(value, decimals) {
+  const amount = num(value, 0);
+  const factor = Math.pow(10, decimals);
+  return Math.round((amount + Math.sign(amount) * Number.EPSILON) * factor) / factor;
+}
+
+function roundCurrencyPHP(value) {
+  return roundToPrecision(value, 2);
+}
+
+function roundUnits(value) {
+  return roundToPrecision(value, 3);
+}
+
 function peso(value, decimals) {
   const amount = num(value, 0);
   const options = decimals == null
@@ -125,6 +139,10 @@ function loadShareMode() {
 function applyShareMode(enabled, remember) {
   shareModeEnabled = enabled;
   document.body.classList.toggle('share-mode', enabled);
+  const portfolioMetricLabel = el('portfolioMetricLabel');
+  if (portfolioMetricLabel) {
+    portfolioMetricLabel.textContent = enabled ? 'Unrealized gain / loss' : 'Total Portfolio Value';
+  }
   const button = el('shareModeToggle');
   const label = enabled ? 'Exit Share Mode' : 'Enter Share Mode';
   if (button) {
@@ -191,7 +209,11 @@ function makeChart(id, config) {
         config.options.scales.x.ticks = Object.assign({}, config.options.scales.x.ticks, { display: false });
       }
       if (id === 'chartValue' && config.options.scales && config.options.scales.y) {
-        config.options.scales.y.ticks = Object.assign({}, config.options.scales.y.ticks, { display: false });
+        config.options.scales.y.ticks = Object.assign({}, config.options.scales.y.ticks, {
+          display: true,
+          callback: function (value) { return Number(value).toFixed(0) + '%'; }
+        });
+        config.options.plugins.tooltip.enabled = true;
       }
     }
     charts[id] = new Chart(node, config);
@@ -352,7 +374,8 @@ function ensureDefaults() {
     if (!position.lu) {
       position.lu = { currentPrice: todayISO(), div: todayISO() };
     }
-    position.invested = num(position.invested, 0);
+    position.units = roundUnits(position.units);
+    position.invested = roundCurrencyPHP(position.invested);
     position.isIlliquid = !!position.isIlliquid;
   });
   delete S.transactions;
@@ -967,7 +990,19 @@ function renderDashboard() {
   setText('wealthEngineValue', pct(wealthEngine.expenseCoveragePct));
   setText('coastYears', windDown.yearsToTarget === 0 ? '0' : windDown.yearsToTarget.toFixed(1));
   setText('windDownSub', 'Projected: ' + peso(windDown.projectedValue) + ' vs target ' + peso(windDown.targetValue));
-  setText('wealthEngineSub', 'Growth & Stability: ' + peso(wealthEngine.growthStabilityAnnualSupport) + ' + Income: ' + peso(wealthEngine.incomeAnnual) + ' = ' + peso(wealthEngine.totalAnnualSupport));
+  const gainPctText = (portfolioTotals.gain >= 0 ? '+' : '') + pct(portfolioTotals.gainPct);
+  const gainClass = portfolioTotals.gain >= 0 ? 'up' : 'down';
+  if (shareModeEnabled) {
+    const wealthEngineSub = el('wealthEngineSub');
+    if (wealthEngineSub) {
+      const peerGain = document.createElement('span');
+      peerGain.className = 'val ' + gainClass;
+      peerGain.textContent = gainPctText;
+      wealthEngineSub.replaceChildren(document.createTextNode('Unrealized: '), peerGain, document.createTextNode(' | Yield on Cost: ' + pct(portfolioTotals.yieldOnCost, 2)));
+    }
+  } else {
+    setText('wealthEngineSub', 'Growth & Stability: ' + peso(wealthEngine.growthStabilityAnnualSupport) + ' + Income: ' + peso(wealthEngine.incomeAnnual) + ' = ' + peso(wealthEngine.totalAnnualSupport));
+  }
   setText('totalInvested', peso(portfolioTotals.invested));
   setText('incomeCoverage', pct(incomeTargetPct));
   setText('incomeCoverageSub', 'Target: ' + pct(S.profile.incomeCoverageTargetPct) + ' of annual spending');
@@ -975,8 +1010,8 @@ function renderDashboard() {
 
   const gainNode = el('gainPct');
   if (gainNode) {
-    gainNode.textContent = (portfolioTotals.gain >= 0 ? '+' : '') + pct(portfolioTotals.gainPct);
-    gainNode.className = 'val ' + (portfolioTotals.gain >= 0 ? 'up' : 'down');
+    gainNode.textContent = gainPctText;
+    gainNode.className = 'val ' + gainClass;
   }
 
   setText('netMonthly', peso(portfolioTotals.monthlyIncome, 2));
@@ -1247,8 +1282,10 @@ function drawIncome() {
 
 function drawValue() {
   const emptyNode = el('valueEmpty');
+  const shareNote = el('valueShareNote');
 
   if (!S.snapshots.length) {
+    if (shareNote) shareNote.style.display = 'none';
     if (emptyNode) {
       emptyNode.style.display = 'block';
     }
@@ -1266,6 +1303,16 @@ function drawValue() {
     emptyNode.style.display = 'none';
   }
 
+  if (shareNote) shareNote.style.display = shareModeEnabled ? 'block' : 'none';
+  const investedValues = S.snapshots.map(function (snapshot) { return num(snapshot.invested, 0); });
+  const marketValues = S.snapshots.map(function (snapshot) { return num(snapshot.marketValue, 0); });
+  function indexedValues(values) {
+    const baseline = values.find(function (value) { return value > 0; });
+    return values.map(function (value) { return baseline ? (value / baseline) * 100 : null; });
+  }
+  const chartInvestedValues = shareModeEnabled ? indexedValues(investedValues) : investedValues;
+  const chartMarketValues = shareModeEnabled ? indexedValues(marketValues) : marketValues;
+
   makeChart('chartValue', {
     type: 'line',
     data: {
@@ -1275,27 +1322,32 @@ function drawValue() {
       datasets: [
         {
           label: 'Invested',
-          data: S.snapshots.map(function (snapshot) {
-            return snapshot.invested;
-          }),
+          data: chartInvestedValues,
           borderColor: '#0b5a92',
           tension: 0.3
         },
         {
           label: 'Market Value',
-          data: S.snapshots.map(function (snapshot) {
-            return snapshot.marketValue;
-          }),
+          data: chartMarketValues,
           borderColor: '#17c3b2',
           tension: 0.3
         }
       ]
     },
     options: {
+      scales: shareModeEnabled ? {
+        y: {
+          title: { display: true, text: 'Relative to first snapshot' },
+          ticks: { callback: function (value) { return Number(value).toFixed(0) + '%'; } }
+        }
+      } : {},
       plugins: {
         tooltip: {
           callbacks: {
             label: function (context) {
+              if (shareModeEnabled) {
+                return context.dataset.label + ': ' + Number(context.parsed.y).toFixed(1) + '% of first snapshot';
+              }
               return context.dataset.label + ': ' + peso(context.parsed.y);
             }
           }
@@ -1495,7 +1547,7 @@ function renderQuickUpdate() {
       const input = document.createElement('input');
       input.type = 'number';
       input.min = '0';
-      input.step = 'any';
+      input.step = column.field === 'units' ? '0.001' : (column.field === 'invested' ? '0.01' : 'any');
       input.required = true;
       input.inputMode = 'decimal';
       input.value = Object.prototype.hasOwnProperty.call(draft, column.field)
@@ -1568,8 +1620,10 @@ function calculateQuickTransaction() {
   const side = (el('quickTradeSide') || {}).value;
   const unitsRaw = (el('quickTradeUnits') || {}).value;
   const totalRaw = (el('quickTradeTotal') || {}).value;
-  const units = Number(unitsRaw);
-  const total = Number(totalRaw);
+  const enteredUnits = Number(unitsRaw);
+  const units = roundUnits(enteredUnits);
+  const enteredTotal = Number(totalRaw);
+  const total = roundCurrencyPHP(enteredTotal);
 
   function invalid(message) {
     return { valid: false, message: message };
@@ -1581,10 +1635,10 @@ function calculateQuickTransaction() {
   if (side !== 'buy' && side !== 'sell') {
     return invalid('Choose Buy or Sell.');
   }
-  if (unitsRaw === '' || !Number.isFinite(units) || units <= 0) {
+  if (unitsRaw === '' || !Number.isFinite(enteredUnits) || enteredUnits <= 0 || units <= 0) {
     return invalid('Enter a transaction quantity greater than zero.');
   }
-  if (totalRaw === '' || !Number.isFinite(total) || total <= 0) {
+  if (totalRaw === '' || !Number.isFinite(enteredTotal) || enteredTotal <= 0 || total <= 0) {
     return invalid('Enter a total amount greater than zero.');
   }
 
@@ -1607,25 +1661,26 @@ function calculateQuickTransaction() {
 function applyQuickTrade(balance, trade) {
   const currentUnits = Number(balance.units);
   const currentInvested = Number(balance.invested);
-  const units = Number(trade.units);
+  const enteredUnits = Number(trade.units);
+  const units = roundUnits(enteredUnits);
+  const cashFlowPHP = roundCurrencyPHP(trade.cashFlowPHP);
   const side = trade.side;
-  if (![currentUnits, currentInvested, units, trade.cashFlowPHP].every(Number.isFinite) || currentUnits < 0 || currentInvested < 0) {
+  if (![currentUnits, currentInvested, enteredUnits, cashFlowPHP].every(Number.isFinite) || currentUnits < 0 || currentInvested < 0 || units <= 0) {
     return { valid: false, message: 'Correct the holding balances before recording a trade.' };
   }
   if (side === 'sell' && units > currentUnits) {
     return { valid: false, message: 'You cannot sell more units than this holding contains.' };
   }
 
-  const unitsAfter = side === 'buy'
+  const unitsAfter = roundUnits(side === 'buy'
     ? currentUnits + units
-    : Math.max(0, currentUnits - units);
+    : Math.max(0, currentUnits - units));
   const costBasisRemovedPHP = side === 'sell' && currentUnits
-    ? currentInvested * (units / currentUnits)
+    ? roundCurrencyPHP(currentInvested * (units / currentUnits))
     : 0;
-  const cashFlowPHP = trade.cashFlowPHP;
-  const investedAfterPHP = side === 'buy'
+  const investedAfterPHP = roundCurrencyPHP(side === 'buy'
     ? currentInvested + cashFlowPHP
-    : (unitsAfter === 0 ? 0 : Math.max(0, currentInvested - costBasisRemovedPHP));
+    : (unitsAfter === 0 ? 0 : Math.max(0, currentInvested - costBasisRemovedPHP)));
 
   return {
     valid: true,
@@ -1633,7 +1688,7 @@ function applyQuickTrade(balance, trade) {
     cashFlowPHP: cashFlowPHP,
     investedAfterPHP: investedAfterPHP,
     costBasisRemovedPHP: costBasisRemovedPHP,
-    realizedGainPHP: side === 'sell' ? cashFlowPHP - costBasisRemovedPHP : null
+    realizedGainPHP: side === 'sell' ? roundCurrencyPHP(cashFlowPHP - costBasisRemovedPHP) : null
   };
 }
 
@@ -1663,7 +1718,7 @@ function renderQuickTransactionPreview() {
     return;
   }
 
-  const unitsAfter = calculation.unitsAfter.toLocaleString('en-US', { maximumFractionDigits: 8 });
+  const unitsAfter = calculation.unitsAfter.toLocaleString('en-US', { maximumFractionDigits: 3 });
   if (calculation.side === 'buy') {
     previewNode.textContent = 'After buy: ' + unitsAfter + ' units; invested ' + peso(calculation.investedAfterPHP, 2) + ' (trade cost ' + peso(calculation.cashFlowPHP, 2) + ').';
   } else {
@@ -1791,7 +1846,7 @@ function renderQuickTransactionHistory() {
     row.appendChild(holdingCell);
 
     const unitsCell = document.createElement('td');
-    unitsCell.textContent = num(transaction.units, 0).toLocaleString('en-US', { maximumFractionDigits: 8 });
+    unitsCell.textContent = num(transaction.units, 0).toLocaleString('en-US', { maximumFractionDigits: 3 });
     row.appendChild(unitsCell);
 
     const totalCell = document.createElement('td');
@@ -2756,7 +2811,8 @@ function renderPosCards() {
     }
 
     function input(field, value, type) {
-      return '<input ' + (type ? 'type="' + type + '" ' : '') + 'value="' + value + '" onchange="updatePos(' + index + ',\'' + field + '\',this.value)">';
+      const step = field === 'units' ? '0.001' : (field === 'invested' ? '0.01' : (type === 'number' ? 'any' : ''));
+      return '<input ' + (type ? 'type="' + type + '" ' : '') + (step ? 'step="' + step + '" ' : '') + 'value="' + value + '" onchange="updatePos(' + index + ',\'' + field + '\',this.value)">';
     }
 
     return '<details class="poscard b-' + position.bucket + '" data-position-index="' + index + '"' + (expandedHoldingPanels.has(position) ? ' open' : '') + '><summary>' + position.ticker + ' <span class="note">' + position.bucket + '</span></summary>' +
@@ -2817,6 +2873,10 @@ function setPositionField(position, field, value) {
     position[field] = value;
   } else if (field === 'divTaxOverride') {
     position.divTaxOverride = (value === '' ? null : Number(value));
+  } else if (field === 'units') {
+    position.units = roundUnits(value);
+  } else if (field === 'invested') {
+    position.invested = roundCurrencyPHP(value);
   } else {
     position[field] = Number(value);
   }
@@ -2853,11 +2913,11 @@ function addPos() {
     name: read('apName') || ticker,
     bucket: read('apBucket'),
     currency: read('apCur'),
-    units: num(read('apUnits'), 0),
+    units: roundUnits(read('apUnits')),
     currentPrice: num(read('apPrice'), 0),
     div: num(read('apDiv'), 0),
     divTaxOverride: (read('apTax') === '' ? null : Number(read('apTax'))),
-    invested: num(read('apInvested'), 0),
+    invested: roundCurrencyPHP(read('apInvested')),
     isIlliquid: !!(el('apIlliq') || {}).checked,
     lu: { currentPrice: todayISO(), div: todayISO() }
   });
