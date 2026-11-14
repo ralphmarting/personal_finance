@@ -107,6 +107,72 @@ label{display:block;font-size:.78rem;color:var(--muted);font-weight:600;margin-b
 .quick-transaction-table .down { color:var(--bad); font-weight:700; }
 #shareMilestoneSummary { display:none; margin:14px 0 0; }
 .share-mode #nextUpCard { display:none; }
+#nextUpCard {
+  --next-up-bg:color-mix(in srgb, var(--hero-blue) 45%, var(--quest-bg-start));
+  padding:22px;
+  margin:22px 0;
+  color:var(--quest-ink);
+  /* Paint recessed edges beyond the content box without layout overflow. */
+  border-image:linear-gradient(
+    to bottom,
+    color-mix(in srgb, black 30%, var(--next-up-bg)),
+    var(--next-up-bg) 8px,
+    var(--next-up-bg) calc(100% - 7px),
+    color-mix(in srgb, black 24%, var(--next-up-bg)) calc(100% - 1px),
+    color-mix(in srgb, white 6%, var(--next-up-bg))
+  ) fill 0 / 0 / 0 100vmax;
+  clip-path:inset(0 -100vmax);
+}
+.next-up-label {
+  color: color-mix(in srgb, var(--quest-ink) 85%, transparent);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.next-up-top { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:16px; }
+.next-up-goal { display:flex; align-items:center; gap:16px; min-width:0; }
+.next-up-icon { font-size:2.8rem; line-height:1; flex-shrink:0; }
+.next-up-copy { min-width:0; }
+.next-up-progress { display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
+.next-up-progress > span { font-size:.8rem; color:color-mix(in srgb, var(--quest-ink) 80%, transparent); }
+#nextUpCard h3 { margin: 8px 0 6px; font-size: 1.4rem; font-weight:700; color:inherit; overflow-wrap: anywhere; }
+.next-up-encouragement { margin:0; font-size:.88rem; color:color-mix(in srgb, var(--quest-ink) 80%, transparent); }
+#nextUpCard.is-complete .next-up-encouragement { display:none; }
+.next-up-details { margin-top:16px; font-size:.84rem; color:color-mix(in srgb, var(--quest-ink) 80%, transparent); }
+#nextUpProgress { color:var(--quest-ink); font-size:2.25rem; line-height:1.1; font-weight:700; }
+.next-up-finish-line { position:relative; margin-top:12px; padding-right:28px; }
+.next-up-flag { position:absolute; right:0; top:50%; transform:translateY(-50%); font-size:1.3rem; }
+#nextUpCard .next-up-bar {
+  height:18px;
+  margin:0;
+  background:color-mix(in srgb, var(--quest-ink) 14%, transparent);
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.3);
+}
+#nextUpBar {
+  position:relative;
+  overflow:hidden;
+  background:var(--income);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25), inset 0 -2px 3px rgba(0,0,0,.16);
+}
+@media (max-width:480px) {
+  .next-up-top { grid-template-columns:1fr; gap:12px; }
+  .next-up-progress { flex-direction:row; align-items:baseline; gap:6px; }
+  .next-up-icon { font-size:2.4rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  #nextUpCard:not(.is-complete) #nextUpBar::after {
+    content:'';
+    position:absolute;
+    inset:0;
+    background:linear-gradient(105deg, transparent 30%, color-mix(in srgb, var(--quest-ink) 60%, transparent) 50%, transparent 70%);
+    animation:next-up-shimmer 1.2s linear infinite;
+  }
+}
+@keyframes next-up-shimmer {
+  from { transform:translateX(-100%); }
+  to { transform:translateX(100%); }
+}
 .share-mode #tab-dashboard .quest { display:none; }
 .share-mode .growth-movers-card .mover-value b { display:none; }
 .share-mode #tab-dashboard .metric:has(#netMonthly),
@@ -259,6 +325,12 @@ canvas{max-height:300px}
   --income: #d8b56a;
   --stability: #8aaad9;
   --insurance: #ad9acb;
+  --hero-blue: #234f70;
+  --hero-gold: #886523;
+  --hero-green: #276f43;
+  --quest-bg-start: #12110f;
+  --quest-bg-end: #090909;
+  --quest-ink: var(--paper);
   --shadow-sm: 0 1px 0 rgba(255, 255, 255, .025), 0 8px 22px rgba(0, 0, 0, .18);
   --shadow: 0 1px 0 rgba(255, 255, 255, .03), 0 14px 34px rgba(0, 0, 0, .24);
   --shadow-lg: 0 1px 0 rgba(255, 255, 255, .035), 0 20px 48px rgba(0, 0, 0, .30);
@@ -450,8 +522,8 @@ canvas {
 .switch input:checked + .slider { background: var(--stability); }
 
 .quest {
-  background: linear-gradient(145deg, #12110f, #090909);
-  color: var(--paper);
+  background: linear-gradient(145deg, var(--quest-bg-start), var(--quest-bg-end));
+  color: var(--quest-ink);
   border: 1px solid rgba(216, 181, 106, .20);
   border-radius: 16px;
   box-shadow: var(--shadow);
@@ -614,6 +686,8 @@ html[data-theme="light"] {
   --warn:#9b6b20; --bad-rgb:127,47,52; --bad:rgb(var(--bad-rgb)); --bad-badge-bg:rgba(var(--bad-rgb),.14); --line:rgba(30,39,48,.12);
   --surface-0:#f2f0e9; --surface-1:#faf8f2; --surface-2:#fffefa; --surface-3:#f0ede5; --surface-4:#e7e3d9;
   --paper:#17202a; --paper-soft:#4f5963;
+  --hero-blue:#4b7e9d; --hero-gold:#b08a36; --hero-green:#489063;
+  --quest-bg-start:#272b31; --quest-bg-end:#272b31; --quest-ink:#f7f5ee;
   --status-text-shadow:0 1px 2px var(--ink); --good-on-hero:#a2e8b4; --bad-on-hero:#ffb5bb;
   --shadow-sm:0 1px 2px rgba(25,30,35,.05),0 8px 22px rgba(25,30,35,.055);
   --shadow:0 1px 2px rgba(25,30,35,.06),0 14px 34px rgba(25,30,35,.08);
@@ -640,7 +714,7 @@ html[data-theme="light"] .btn.alt { background:transparent; color:var(--ink); bo
 html[data-theme="light"] .btn.ghost { background:var(--surface-3); color:var(--ink); }
 html[data-theme="light"] .toolbtn.sel { background:var(--ink); color:#fffefa; border-color:var(--ink); }
 html[data-theme="light"] .chartwrap, html[data-theme="light"] .projector-chart-panel, html[data-theme="light"] .movers-panel { background:var(--surface-1); }
-html[data-theme="light"] .quest { background:#272b31; color:#f7f5ee; }
+html[data-theme="light"] .quest { background:var(--quest-bg-start); color:var(--quest-ink); }
 html[data-theme="light"] .bottomnav { background:rgba(255,254,250,.95); }
 html[data-theme="light"] .poscard.b-Growth { background:linear-gradient(180deg,rgba(127,203,122,.12),#fffefa); }
 html[data-theme="light"] .poscard.b-Income { background:linear-gradient(180deg,rgba(216,181,106,.14),#fffefa); }
@@ -687,15 +761,15 @@ html[data-theme="light"] .poscard.b-Insurance { background:linear-gradient(180de
 }
 
 html[data-theme="dark"] .grid .hero:nth-child(1) {
-  background: linear-gradient(145deg, #18364f 0%, #234f70 58%, #173149 100%);
+  background: linear-gradient(145deg, #18364f 0%, var(--hero-blue) 58%, #173149 100%);
   border-color: rgba(135, 191, 230, .30);
 }
 html[data-theme="dark"] .grid .hero:nth-child(2) {
-  background: linear-gradient(145deg, #503d16 0%, #886523 58%, #493612 100%);
+  background: linear-gradient(145deg, #503d16 0%, var(--hero-gold) 58%, #493612 100%);
   border-color: rgba(226, 188, 101, .34);
 }
 html[data-theme="dark"] .grid .hero:nth-child(3) {
-  background: linear-gradient(145deg, #143b25 0%, #276f43 58%, #12351f 100%);
+  background: linear-gradient(145deg, #143b25 0%, var(--hero-green) 58%, #12351f 100%);
   border-color: rgba(126, 210, 148, .30);
 }
 
@@ -786,15 +860,15 @@ html[data-theme="light"] .hero {
   box-shadow: 0 15px 34px rgba(28, 40, 48, .14), inset 0 1px 0 rgba(255,255,255,.24);
 }
 html[data-theme="light"] .grid .hero:nth-child(1) {
-  background: linear-gradient(145deg, #315f7d 0%, #4b7e9d 58%, #294f69 100%);
+  background: linear-gradient(145deg, #315f7d 0%, var(--hero-blue) 58%, #294f69 100%);
   border-color: rgba(34, 73, 98, .20);
 }
 html[data-theme="light"] .grid .hero:nth-child(2) {
-  background: linear-gradient(145deg, #84631f 0%, #b08a36 58%, #73551a 100%);
+  background: linear-gradient(145deg, #84631f 0%, var(--hero-gold) 58%, #73551a 100%);
   border-color: rgba(114, 82, 20, .21);
 }
 html[data-theme="light"] .grid .hero:nth-child(3) {
-  background: linear-gradient(145deg, #2d744d 0%, #489063 58%, #286742 100%);
+  background: linear-gradient(145deg, #2d744d 0%, var(--hero-green) 58%, #286742 100%);
   border-color: rgba(35, 99, 63, .20);
 }
 html[data-theme="light"] .hero .label,
@@ -829,6 +903,14 @@ html[data-theme="light"] .gainers-panel {
 html[data-theme="light"] .losers-panel {
   background: linear-gradient(145deg, rgba(166, 79, 82, .13), rgba(255, 254, 250, .92));
   border-color: rgba(166, 79, 82, .24);
+}
+
+body:not(.share-mode) #tab-dashboard .dashboard-metrics > .metric:nth-child(1) { --metric-tint:var(--hero-blue); }
+body:not(.share-mode) #tab-dashboard .dashboard-metrics > .metric:nth-child(2) { --metric-tint:var(--hero-gold); }
+body:not(.share-mode) #tab-dashboard .dashboard-metrics > .metric:nth-child(3) { --metric-tint:var(--hero-green); }
+body:not(.share-mode) #tab-dashboard .dashboard-metrics > .metric {
+  background: color-mix(in srgb, var(--metric-tint) 18%, var(--card));
+  border-color: color-mix(in srgb, var(--metric-tint) 30%, var(--line));
 }
 
 @media (max-width: 760px) {

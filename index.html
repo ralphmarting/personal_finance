@@ -68,7 +68,7 @@
         </div>
       </div>
 
-      <div class="grid cols-3">
+      <div class="grid cols-3 dashboard-metrics">
         <div class="metric">
           <div class="label" id="portfolioMetricLabel">Total Portfolio Value</div>
           <span class="val" id="currentValue">-</span> <span class="val" id="gainPct">-</span>
@@ -86,9 +86,29 @@
         </div>
       </div>
 
-      <div id="nextUpCard" class="card"><b>&#127937; Next Up</b>
-        <p id="nextUp" style="margin:8px 0"></p>
-        <div class="bar mini"><span id="nextUpBar"></span></div>
+      <div id="nextUpCard" class="next-up-banner">
+        <div class="next-up-top">
+          <div class="next-up-goal">
+            <span class="next-up-icon" id="nextUpIcon" aria-hidden="true"></span>
+            <div class="next-up-copy">
+              <div class="next-up-label"><span aria-hidden="true">&#127937;</span> <span id="nextUpLabel">Next milestone</span></div>
+              <h3 id="nextUp"></h3>
+              <p class="next-up-encouragement" id="nextUpEncouragement"></p>
+            </div>
+          </div>
+          <div class="next-up-progress">
+            <strong id="nextUpProgress"></strong>
+            <span>complete</span>
+          </div>
+        </div>
+        <div class="next-up-details">
+          <span id="nextUpRemaining"></span>
+        </div>
+        <div class="next-up-finish-line">
+          <div class="bar next-up-bar" id="nextUpTrack" role="progressbar" aria-labelledby="nextUp"
+            aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="nextUpBar"></span></div>
+          <span class="next-up-flag" aria-hidden="true">&#127937;</span>
+        </div>
       </div>
 
       <div class="grid cols-2">

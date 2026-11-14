@@ -1105,27 +1105,38 @@ function nextUp(portfolioTotals, coastMetrics) {
 
   const block = el('nextUp');
   const bar = el('nextUpBar');
+  const candidate = candidates[0];
+  const progress = candidate ? clamp(candidate.ratio * 100, 0, 100) : 100;
+  const card = el('nextUpCard');
+  const remaining = el('nextUpRemaining');
+  const track = el('nextUpTrack');
 
-  if (!candidates.length) {
-    if (block) {
-      block.textContent = shareDisplayText('All numeric milestones achieved! 🎉');
-    }
-    if (bar) {
-      bar.style.width = '100%';
-    }
-    return;
+  setText('nextUpLabel', candidate ? 'Next milestone' : 'Milestones complete');
+  setText('nextUpIcon', candidate ? getMilestoneEmoji(candidate.milestone) : '🏆');
+  setText('nextUpProgress', pct(progress, 1));
+  setText('nextUpEncouragement', !candidate ? ''
+    : progress >= 75 ? 'The finish line is in sight.'
+    : progress >= 25 ? 'Every step brings this goal closer.'
+    : 'Your next win starts with the next step.');
+  if (card) {
+    card.classList.toggle('is-complete', !candidate);
+  }
+  if (remaining) {
+    remaining.hidden = !candidate;
+    remaining.textContent = candidate
+      ? shareDisplayText(peso(candidate.threshold - candidate.current) + ' remaining')
+      : '';
   }
 
-  const candidate = candidates[0];
-  const remaining = candidate.threshold - candidate.current;
-  const needText = peso(remaining);
-
   if (block) {
-    block.textContent = shareDisplayText('Next Up: ' + candidate.milestone.label + ' — ' + needText + ' more to go.');
+    block.textContent = shareDisplayText(candidate ? candidate.milestone.label : 'All numeric milestones achieved! 🎉');
   }
 
   if (bar) {
-    bar.style.width = clamp(candidate.ratio * 100, 0, 100) + '%';
+    bar.style.width = progress + '%';
+  }
+  if (track) {
+    track.setAttribute('aria-valuenow', String(progress));
   }
 }
 
@@ -1358,6 +1369,10 @@ function drawValue() {
 }
 
 /* ===== milestones ===== */
+function getMilestoneEmoji(milestone) {
+  return (milestone.motivator.match(/[\p{Emoji_Presentation}\u{1F000}-\u{1FAFF}\u2600-\u27BF]/u) || [CATEGORIES_BY_TYPE[milestone.cat] || '⭐'])[0];
+}
+
 function renderMilestones() {
   const box = el('questGrid');
   if (!box) {
@@ -1407,7 +1422,7 @@ function renderMilestones() {
       }, 50);
     }
 
-    const emoji = (milestone.motivator.match(/[\p{Emoji_Presentation}\u{1F000}-\u{1FAFF}\u2600-\u27BF]/u) || [CATEGORIES_BY_TYPE[milestone.cat] || '⭐'])[0];
+    const emoji = getMilestoneEmoji(milestone);
 
     let barHtml = '';
     if (milestone.type !== 'manual' && threshold > 0) {
