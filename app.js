@@ -37,7 +37,16 @@ const CATEGORIES_BY_TYPE = {
   Family: '👨‍👩‍👧‍👦'
 };
 let REBALANCE_MODE = 'current';
-let incomeFiMessageText = '';
+let milestoneCelebration = null;
+const incomeFiMessageVariant = Math.random();
+const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+const metricMotion = new Map();
+const elementMotion = new WeakMap();
+const activeMotion = new Set();
+const ambientNodes = new Set();
+const chartRenderState = {};
+const saveFeedbackTimers = new WeakMap();
+let ambientObserver;
 
 /* ===== helpers ===== */
 function el(id) {
@@ -52,8 +61,153 @@ function shareDisplayText(value) {
 function setText(id, value) {
   const node = el(id);
   if (node) {
-    node.textContent = SHARE_MASKED_TEXT_IDS.has(id) ? shareDisplayText(value) : value;
+    const text = SHARE_MASKED_TEXT_IDS.has(id) ? shareDisplayText(value) : String(value);
+    const changed = node.textContent && node.textContent !== text;
+    node.textContent = text;
+    if (changed && (id === 'divPayoffDetails' || id === 'pjResultCopy')) {
+      pulseUpdatedNode(node.parentElement);
+    }
   }
+}
+
+/* ===== shared motion ===== */
+function isInViewport(node) {
+  const rect = node.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 && rect.bottom > 0 &&
+    rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+}
+
+function canAnimate(node) {
+  return !motionPreference.matches && !document.hidden && isInViewport(node);
+}
+
+function animateElement(node, frames, options) {
+  if (!node || !canAnimate(node)) return;
+  const previous = elementMotion.get(node);
+  if (previous) previous.cancel();
+  const animation = node.animate(frames, Object.assign({ duration: 400, easing: 'ease-out' }, options));
+  elementMotion.set(node, animation);
+  activeMotion.add(animation);
+  function cleanup() {
+    activeMotion.delete(animation);
+    if (elementMotion.get(node) === animation) elementMotion.delete(node);
+  }
+  animation.addEventListener('finish', cleanup, { once: true });
+  animation.addEventListener('cancel', cleanup, { once: true });
+  return animation;
+}
+
+function pulseUpdatedNode(node) {
+  animateElement(node, [
+    { backgroundColor: 'color-mix(in srgb, var(--stability) 18%, transparent)' },
+    { backgroundColor: 'transparent' }
+  ], { duration: 900 });
+}
+
+function animateEntrance(section) {
+  if (!section) return;
+  const cards = Array.from(section.querySelectorAll('.hero, .metric, .card, .quest, .settings-group'))
+    .filter(function (node) {
+      const parentCard = node.parentElement.closest('.card, .quest, .settings-group');
+      return (!parentCard || !section.contains(parentCard)) && isInViewport(node);
+    });
+  (cards.length ? cards : [section]).forEach(function (node, index) {
+    animateElement(node, [
+      { opacity: 0, transform: 'translateY(10px)' },
+      { opacity: 1, transform: 'translateY(0)' }
+    ], { duration: 380, delay: Math.min(index * 45, 180), fill: 'backwards' });
+  });
+}
+
+function setMetricValue(id, value, format) {
+  const node = el(id);
+  if (!node) return;
+  const previous = metricMotion.get(id);
+  const text = SHARE_MASKED_TEXT_IDS.has(id) ? shareDisplayText(format(value)) : format(value);
+  if (previous && previous.target === value && previous.text === text && previous.frame && canAnimate(node)) return;
+  if (previous && previous.frame) cancelAnimationFrame(previous.frame);
+  const state = { node: node, current: value, target: value, text: text, frame: 0 };
+  metricMotion.set(id, state);
+  if (!previous || previous.text === text || !Number.isFinite(value) ||
+      !Number.isFinite(previous.current) || shareModeEnabled || !canAnimate(node)) {
+    node.textContent = text;
+    return;
+  }
+  const startValue = previous.current;
+  const startTime = performance.now();
+  function tick(time) {
+    const progress = canAnimate(node) ? clamp((time - startTime) / 550, 0, 1) : 1;
+    state.current = startValue + (value - startValue) * (1 - Math.pow(1 - progress, 3));
+    node.textContent = progress < 1 ? format(state.current) : text;
+    state.frame = progress < 1 ? requestAnimationFrame(tick) : 0;
+  }
+  state.current = startValue;
+  state.frame = requestAnimationFrame(tick);
+}
+
+function finishMetricMotion() {
+  metricMotion.forEach(function (state) {
+    if (state.frame) cancelAnimationFrame(state.frame);
+    state.node.textContent = state.text;
+    state.current = state.target;
+    state.frame = 0;
+  });
+}
+
+function syncAmbientMotion() {
+  if (!ambientObserver) return;
+  ambientNodes.forEach(function (node) {
+    if (!node.isConnected) {
+      ambientObserver.unobserve(node);
+      ambientNodes.delete(node);
+    }
+  });
+  document.querySelectorAll('.hero, #nextUpCard, .qcard.in-progress').forEach(function (node) {
+    if (!ambientNodes.has(node)) {
+      ambientNodes.add(node);
+      ambientObserver.observe(node);
+    }
+    node.classList.toggle('motion-visible', isInViewport(node));
+  });
+}
+
+function showSaveFeedback(buttonId, nodes) {
+  if (milestoneCelebration) return;
+  const button = el(buttonId);
+  if (button) {
+    clearTimeout(saveFeedbackTimers.get(button));
+    button.classList.add('save-confirmed');
+    saveFeedbackTimers.set(button, setTimeout(function () {
+      button.classList.remove('save-confirmed');
+      saveFeedbackTimers.delete(button);
+    }, 1400));
+  }
+  (nodes || []).forEach(pulseUpdatedNode);
+}
+
+function setupMotion() {
+  ambientObserver = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      entry.target.classList.toggle('motion-visible', entry.isIntersecting);
+    });
+  }, { threshold: 0.05 });
+  function settleMotion() {
+    document.body.classList.toggle('motion-paused', document.hidden);
+    if (document.hidden || motionPreference.matches) {
+      finishMetricMotion();
+      activeMotion.forEach(function (animation) { animation.finish(); });
+      Object.keys(charts).forEach(function (id) {
+        charts[id].stop();
+        charts[id].update('none');
+      });
+    }
+  }
+  document.addEventListener('visibilitychange', settleMotion);
+  motionPreference.addEventListener('change', function () {
+    Object.keys(chartRenderState).forEach(function (id) { delete chartRenderState[id]; });
+    settleMotion();
+  });
+  settleMotion();
 }
 
 function setHtml(id, value) {
@@ -137,7 +291,9 @@ function loadShareMode() {
 }
 
 function applyShareMode(enabled, remember) {
+  finishMetricMotion();
   shareModeEnabled = enabled;
+  if (enabled) dismissMilestoneCelebration();
   document.body.classList.toggle('share-mode', enabled);
   const portfolioMetricLabel = el('portfolioMetricLabel');
   if (portfolioMetricLabel) {
@@ -181,6 +337,7 @@ function saveQuickTransactionHistory() {
 function toast(message) {
   const toastNode = document.createElement('div');
   toastNode.className = 'toast';
+  toastNode.setAttribute('role', 'status');
   toastNode.textContent = message;
   document.body.appendChild(toastNode);
   setTimeout(function () { toastNode.remove(); }, 4000);
@@ -189,9 +346,6 @@ function toast(message) {
 function makeChart(id, config) {
   const node = el(id);
   if (!node || typeof Chart === 'undefined') return null;
-  if (charts[id]) {
-    try { charts[id].destroy(); } catch (_) { }
-  }
   try {
     if (id === 'chartValue') {
       config.options = config.options || {};
@@ -216,7 +370,26 @@ function makeChart(id, config) {
         config.options.plugins.tooltip.enabled = true;
       }
     }
-    charts[id] = new Chart(node, config);
+    config.options = config.options || {};
+    const previous = chartRenderState[id];
+    const privacyChanged = previous && previous.shareMode !== shareModeEnabled;
+    const animate = canAnimate(node) && !privacyChanged;
+    config.options.animation = { duration: animate ? 500 : 0, easing: 'easeOutCubic' };
+    const signature = JSON.stringify([config, S.ui.theme, shareModeEnabled], function (_, value) {
+      return typeof value === 'function' ? value.toString() : value;
+    });
+    const chart = charts[id];
+    if (chart && chart.config.type === config.type) {
+      if (previous && previous.signature === signature) return chart;
+      chart.stop();
+      chart.data = config.data;
+      chart.options = config.options;
+      chart.update(animate ? undefined : 'none');
+    } else {
+      if (chart) chart.destroy();
+      charts[id] = new Chart(node, config);
+    }
+    chartRenderState[id] = { signature: signature, shareMode: shareModeEnabled };
     return charts[id];
   } catch (error) {
     console.error('chart ' + id, error);
@@ -782,6 +955,7 @@ function stale() {
 
 /* ===== navigation ===== */
 function showTab(name) {
+  finishMetricMotion();
   document.querySelectorAll('.tab').forEach(function (tab) {
     tab.classList.remove('active');
   });
@@ -798,10 +972,13 @@ function showTab(name) {
   S.ui.tab = name;
   save();
   renderAll();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: motionPreference.matches ? 'instant' : 'smooth' });
+  animateEntrance(section);
 }
 
 function showTool(name) {
+  const wasActive = el('tool-' + name) && el('tool-' + name).classList.contains('active');
+  finishMetricMotion();
   document.querySelectorAll('.tool').forEach(function (tool) {
     tool.classList.remove('active');
   });
@@ -818,6 +995,8 @@ function showTool(name) {
   S.ui.tool = name;
   save();
   renderTools();
+  if (!wasActive) animateEntrance(section);
+  syncAmbientMotion();
 }
 
 /* ===== view preferences and display metrics ===== */
@@ -907,6 +1086,7 @@ function renderAll() {
       console.error(renderFn.name, error);
     }
   });
+  syncAmbientMotion();
 }
 
 function renderBell() {
@@ -932,19 +1112,28 @@ function renderBell() {
 }
 
 function buildIncomeFiMessage(yieldOnCost, monthlyIncome) {
-  const yocValue = num(yieldOnCost, 0).toFixed(2);
-  const monthlyValue = num(monthlyIncome, 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const emphasizedYoc = '<span style="font-size:1.5rem;font-weight:700">' + yocValue + '%</span>';
-  const emphasizedMonthly = '<span style="font-size:1.5rem;font-weight:700">₱' + monthlyValue + '</span>';
-  const messages = [
-    'Talk about cash flow leverage! Your income bucket is currently flexing a ' + emphasizedYoc + ' Return on Original Capital, handing you ' + emphasizedMonthly + ' in monthly freedom cash on pure autopilot. Markets will swing and prices will bleed, but your cash flow engine doesn’t care about short-term noise—every down day is just a discount sale on your independence. Redeploy that yield to compound your empire, or treat yourself for staying the course!',
-    'Your money is officially fighting for your freedom! Operating at a bad-ass ' + emphasizedYoc + ' Yield on Cost, your portfolio is churning out ' + emphasizedMonthly + ' of net cash flow every single month. When red markets hit and panic sets in, remember: price is noise, but yield is real. Bear markets are where true wealth is built—keep stacking discounted shares, lock in higher future yields, and watch your monthly freedom check grow!',
-    'Your freedom engine is running at ' + emphasizedYoc + ' Yield on Cost—unlocking ' + emphasizedMonthly + '/month in passive cash. Red market days are just your strategy on sale; stick to the plan, grab a little treat if you’ve earned it, and keep buying back your time piece by piece.',
-    'Your income bucket is no longer just sitting there—it’s building your exit plan. At ' + emphasizedYoc + ' Yield on Cost, you’re already generating ' + emphasizedMonthly + '/month in cash flow that can buy back time, fund your freedom, and keep the mission moving when markets get noisy.',
-    'Every dividend check is a vote for your future. With ' + emphasizedYoc + ' Yield on Cost, your portfolio is sending ' + emphasizedMonthly + '/month of freedom cash your way—proof that patience, discipline, and compounding are still the ultimate wealth hack.'
+  const monthly = shareDisplayText(peso(monthlyIncome, 2)) + '/month';
+  const yieldText = pct(yieldOnCost, 2) + ' yield on cost';
+  const messages = monthlyIncome > 0 ? [
+    { headline: monthly + '. Your freedom engine is running.',
+      copy: yieldText + '. That is cash flow with a mission: more choices for future you.' },
+    { headline: monthly + ' working toward your next chapter.',
+      copy: yieldText + '. The bigger goal is not a number on a screen. It is more say over your time.' },
+    { headline: 'Your money has a side hustle: ' + monthly + '.',
+      copy: yieldText + '. One income stream at a time, you are building something bigger than a payday.' },
+    { headline: monthly + '. Small stream. Big mission.',
+      copy: yieldText + '. Keep the long game in view: assets that help fund the life you want.' },
+    { headline: 'Future you has backup: ' + monthly + '.',
+      copy: yieldText + '. This is what building options looks like. Let your plan, not market noise, lead.' }
+  ] : [
+    { headline: 'Your freedom engine starts with a plan.',
+      copy: 'Give your next income goal a number. The Dividend Planner can help you map the gap.' },
+    { headline: 'The first income milestone is waiting.',
+      copy: 'Start with the life you want to fund, then explore the numbers in the Dividend Planner.' },
+    { headline: 'Big missions start with a first step.',
+      copy: 'Build your income plan in the Dividend Planner. No rush to buy; start by knowing your target.' }
   ];
-
-  return messages[Math.floor(Math.random() * messages.length)];
+  return messages[Math.floor(incomeFiMessageVariant * messages.length)];
 }
 
 function renderGrowthMovers() {
@@ -985,10 +1174,10 @@ function renderDashboard() {
   const wealthEngine = getWealthEngineMetrics();
   const windDown = getWindDownMetrics();
 
-  setText('coastTarget', pct(coastMetrics.progress));
+  setMetricValue('coastTarget', coastMetrics.progress, pct);
   setText('coastSub', peso(coastMetrics.currentValue) + ' of ' + peso(coastMetrics.fireNumber) + ' accumulated');
-  setText('wealthEngineValue', pct(wealthEngine.expenseCoveragePct));
-  setText('coastYears', windDown.yearsToTarget === 0 ? '0' : windDown.yearsToTarget.toFixed(1));
+  setMetricValue('wealthEngineValue', wealthEngine.expenseCoveragePct, pct);
+  setMetricValue('coastYears', windDown.yearsToTarget, function (value) { return value === 0 ? '0' : value.toFixed(1); });
   setText('windDownSub', 'Projected: ' + peso(windDown.projectedValue) + ' vs target ' + peso(windDown.targetValue));
   const gainPctText = (portfolioTotals.gain >= 0 ? '+' : '') + pct(portfolioTotals.gainPct);
   const gainClass = portfolioTotals.gain >= 0 ? 'up' : 'down';
@@ -1003,10 +1192,10 @@ function renderDashboard() {
   } else {
     setText('wealthEngineSub', 'Growth & Stability: ' + peso(wealthEngine.growthStabilityAnnualSupport) + ' + Income: ' + peso(wealthEngine.incomeAnnual) + ' = ' + peso(wealthEngine.totalAnnualSupport));
   }
-  setText('totalInvested', peso(portfolioTotals.invested));
+  setMetricValue('totalInvested', portfolioTotals.invested, peso);
   setText('incomeCoverage', pct(incomeTargetPct));
   setText('incomeCoverageSub', 'Target: ' + pct(S.profile.incomeCoverageTargetPct) + ' of annual spending');
-  setText('currentValue', peso(portfolioTotals.currentValue));
+  setMetricValue('currentValue', portfolioTotals.currentValue, peso);
 
   const gainNode = el('gainPct');
   if (gainNode) {
@@ -1014,17 +1203,11 @@ function renderDashboard() {
     gainNode.className = 'val ' + gainClass;
   }
 
-  setText('netMonthly', peso(portfolioTotals.monthlyIncome, 2));
-  const incomeFiNode = el('incomeFiMessage');
-  if (incomeFiNode) {
-    if (!incomeFiMessageText) {
-      incomeFiMessageText = buildIncomeFiMessage(portfolioTotals.yieldOnCost, portfolioTotals.monthlyIncome);
-    }
-    incomeFiNode.innerHTML = shareModeEnabled
-      ? incomeFiMessageText.replace(/₱[\d,]+(?:\.\d+)?/g, shareDisplayText)
-      : incomeFiMessageText;
-  }
-  setText('coastTargetMetric', peso(coastMetrics.coastTarget));
+  setMetricValue('netMonthly', portfolioTotals.monthlyIncome, function (value) { return peso(value, 2); });
+  const incomeFiMessage = buildIncomeFiMessage(portfolioTotals.yieldOnCost, portfolioTotals.monthlyIncome);
+  setText('incomeFiHeadline', incomeFiMessage.headline);
+  setText('incomeFiMessage', incomeFiMessage.copy + (portfolioTotals.monthlyIncome > 0 ? ' Income is estimated; dividends can change.' : ''));
+  setMetricValue('coastTargetMetric', coastMetrics.coastTarget, peso);
 
   const coastBar = el('coastHeroBar');
   if (coastBar) {
@@ -1059,42 +1242,21 @@ function renderDashboard() {
   drawValue();
 }
 
-function nextUp(portfolioTotals, coastMetrics) {
+function getNextMilestone(portfolioTotals, coastMetrics) {
   const candidates = [];
 
   S.milestones.forEach(function (milestone) {
-    let current = null;
-    let threshold = milestone.threshold;
-    let unitType = '';
-
-    if (milestone.type === 'capital') {
-      current = portfolioTotals.invested;
-      unitType = 'capital';
-    } else if (milestone.type === 'gain') {
-      current = portfolioTotals.gain;
-      unitType = 'capital';
-    } else if (milestone.type === 'income') {
-      current = portfolioTotals.monthlyIncome;
-      unitType = 'income';
-    } else if (milestone.type === 'incomeCover') {
-      current = portfolioTotals.annualIncome;
-      threshold = num(S.profile.annualSpending) * num(milestone.threshold);
-      unitType = 'annualIncome';
-    } else if (milestone.type === 'coast') {
-      current = coastMetrics.currentValue;
-      threshold = coastMetrics.target;
-      unitType = 'capital';
-    } else {
+    if (['capital', 'gain', 'income', 'incomeCover', 'coast'].indexOf(milestone.type) < 0) {
       return;
     }
 
-    if (current < threshold) {
+    const progress = getMilestoneProgress(milestone, portfolioTotals, coastMetrics);
+    if (progress.current < progress.threshold) {
       candidates.push({
         milestone: milestone,
-        ratio: threshold ? (current / threshold) : 0,
-        current: current,
-        threshold: threshold,
-        unit: unitType
+        ratio: progress.threshold ? (progress.current / progress.threshold) : 0,
+        current: progress.current,
+        threshold: progress.threshold
       });
     }
   });
@@ -1102,28 +1264,37 @@ function nextUp(portfolioTotals, coastMetrics) {
   candidates.sort(function (a, b) {
     return b.ratio - a.ratio;
   });
+  return candidates[0];
+}
 
+function nextUp(portfolioTotals, coastMetrics) {
   const block = el('nextUp');
   const bar = el('nextUpBar');
-  const candidate = candidates[0];
+  const nextCandidate = getNextMilestone(portfolioTotals, coastMetrics);
+  const celebrating = !!milestoneCelebration;
+  const candidate = celebrating ? { milestone: milestoneCelebration.featured, ratio: 1 } : nextCandidate;
   const progress = candidate ? clamp(candidate.ratio * 100, 0, 100) : 100;
   const card = el('nextUpCard');
   const remaining = el('nextUpRemaining');
   const track = el('nextUpTrack');
 
-  setText('nextUpLabel', candidate ? 'Next milestone' : 'Milestones complete');
+  setText('nextUpLabel', celebrating ? 'Milestone unlocked' : candidate ? 'Next milestone' : 'Milestones complete');
   setText('nextUpIcon', candidate ? getMilestoneEmoji(candidate.milestone) : '🏆');
   setText('nextUpProgress', pct(progress, 1));
-  setText('nextUpEncouragement', !candidate ? ''
+  const viewQuest = el('nextUpViewQuest');
+  if (viewQuest) viewQuest.hidden = celebrating || !candidate;
+  setText('nextUpEncouragement', celebrating ? 'Goal reached. Take the win.'
+    : !candidate ? ''
     : progress >= 75 ? 'The finish line is in sight.'
     : progress >= 25 ? 'Every step brings this goal closer.'
     : 'Your next win starts with the next step.');
   if (card) {
-    card.classList.toggle('is-complete', !candidate);
+    card.classList.toggle('is-complete', celebrating || !candidate);
+    card.classList.toggle('is-celebrating', celebrating);
   }
   if (remaining) {
-    remaining.hidden = !candidate;
-    remaining.textContent = candidate
+    remaining.hidden = celebrating || !candidate;
+    remaining.textContent = candidate && !celebrating
       ? shareDisplayText(peso(candidate.threshold - candidate.current) + ' remaining')
       : '';
   }
@@ -1138,6 +1309,7 @@ function nextUp(portfolioTotals, coastMetrics) {
   if (track) {
     track.setAttribute('aria-valuenow', String(progress));
   }
+  return nextCandidate;
 }
 
 function shareList(list, labelFn) {
@@ -1291,7 +1463,42 @@ function drawIncome() {
   });
 }
 
+function renderSnapshotMomentum() {
+  const panel = el('snapshotMomentum');
+  if (!panel) return;
+  panel.hidden = shareModeEnabled;
+  if (shareModeEnabled) {
+    setText('snapshotMomentumCopy', '');
+    return;
+  }
+  const count = S.snapshots.length;
+  if (count < 2) {
+    setText('snapshotMomentumCopy', count
+      ? '1 checkpoint saved. At least 2 required to compare changes.'
+      : 'No checkpoints saved.');
+    return;
+  }
+  const previous = S.snapshots[count - 2];
+  const latest = S.snapshots[count - 1];
+  const investedChange = num(latest.invested) - num(previous.invested);
+  const unrealizedChange = (num(latest.marketValue) - num(latest.invested)) -
+    (num(previous.marketValue) - num(previous.invested));
+  function changeValue(amount) {
+    const value = document.createElement('strong');
+    value.className = 'val' + (amount > 0 ? ' up' : amount < 0 ? ' down' : '');
+    value.textContent = (amount > 0 ? '+' : amount < 0 ? '−' : '') + peso(Math.abs(amount));
+    return value;
+  }
+  el('snapshotMomentumCopy').replaceChildren(
+    document.createTextNode('Last two checkpoints: Invested capital '),
+    changeValue(investedChange),
+    document.createTextNode(' · Unrealized gain/loss '),
+    changeValue(unrealizedChange)
+  );
+}
+
 function drawValue() {
+  renderSnapshotMomentum();
   const emptyNode = el('valueEmpty');
   const shareNote = el('valueShareNote');
 
@@ -1303,9 +1510,11 @@ function drawValue() {
     if (charts.chartValue) {
       try {
         charts.chartValue.destroy();
-      } catch (_) {
-        // ignore chart destruction errors
+      } catch (error) {
+        console.error('chart chartValue', error);
       }
+      delete charts.chartValue;
+      delete chartRenderState.chartValue;
     }
     return;
   }
@@ -1369,6 +1578,170 @@ function drawValue() {
 }
 
 /* ===== milestones ===== */
+function scrollToJourneySection(node) {
+  requestAnimationFrame(function () {
+    node.focus({ preventScroll: true });
+    window.scrollTo({
+      top: window.scrollY + node.getBoundingClientRect().top - document.querySelector('.header').getBoundingClientRect().height - 16,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    });
+  });
+}
+
+function findMilestoneCard(id) {
+  return Array.from(el('questGrid').children).find(function (card) {
+    return card.dataset.milestoneId === String(id);
+  });
+}
+
+function viewNextMilestone() {
+  if (shareModeEnabled) return;
+  showTab('dashboard');
+  const candidate = getNextMilestone(getPortfolioTotals(), coast());
+  if (candidate) {
+    scrollToJourneySection(findMilestoneCard(candidate.milestone.id));
+  }
+}
+
+function viewSnapshots() {
+  showTab('data');
+  scrollToJourneySection(el('snapshotsCard'));
+}
+
+function dismissMilestoneCelebration() {
+  milestoneCelebration = null;
+  const panel = el('milestoneCelebration');
+  if (panel && panel.open) panel.close();
+  document.body.classList.remove('milestone-celebrating');
+  setText('milestoneCelebrationTitle', '');
+  el('milestoneCelebrationWins').replaceChildren();
+  el('milestoneConfetti').replaceChildren();
+}
+
+function captureMilestoneState() {
+  const totals = getPortfolioTotals();
+  const metrics = coast();
+  return {
+    completedIds: new Set(S.milestones.filter(function (milestone) {
+      return getMilestoneProgress(milestone, totals, metrics).achieved;
+    }).map(function (milestone) { return milestone.id; })),
+    next: getNextMilestone(totals, metrics)
+  };
+}
+
+function renderAfterMilestoneSave(previous) {
+  const totals = getPortfolioTotals();
+  const metrics = coast();
+  const wins = S.milestones.filter(function (milestone) {
+    return !previous.completedIds.has(milestone.id) &&
+      (milestone.type !== 'manual' || S.achievedIds.indexOf(milestone.id) < 0) &&
+      getMilestoneProgress(milestone, totals, metrics).achieved;
+  });
+  if (wins.length) {
+    const achievedAt = new Date().toISOString();
+    wins.forEach(function (milestone) {
+      milestone.achievedAt = achievedAt;
+    });
+    save();
+  }
+  if (wins.length && !shareModeEnabled) {
+    milestoneCelebration = {
+      wins: wins,
+      featured: wins.find(function (milestone) {
+        return previous.next && milestone.id === previous.next.milestone.id;
+      }) || wins[0]
+    };
+  }
+  renderAll();
+  if (wins.length && !shareModeEnabled) celebrateMilestones();
+}
+
+function celebrateMilestones() {
+  showTab('dashboard');
+  const card = el('nextUpCard');
+  window.scrollTo({
+    top: window.scrollY + card.getBoundingClientRect().top - document.querySelector('.header').getBoundingClientRect().height - 16,
+    behavior: 'instant'
+  });
+  const wins = milestoneCelebration.wins;
+  setText('milestoneCelebrationTitle', wins.length === 1 ? 'Milestone unlocked!' : wins.length + ' milestones unlocked!');
+  const list = el('milestoneCelebrationWins');
+  list.replaceChildren();
+  wins.forEach(function (milestone) {
+    const item = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = getMilestoneEmoji(milestone) + ' ' + milestone.label;
+    const copy = document.createElement('p');
+    copy.textContent = milestone.motivator;
+    item.append(title, copy);
+    list.appendChild(item);
+  });
+  const next = getNextMilestone(getPortfolioTotals(), coast());
+  setText('milestoneCelebrationConfirm', next ? 'On to the next goal →' : 'Celebrate the journey →');
+  const confetti = el('milestoneConfetti');
+  confetti.replaceChildren();
+  for (let index = 0; index < 24; index++) {
+    const piece = document.createElement('span');
+    piece.style.setProperty('--x', (index * 37 % 100) + '%');
+    piece.style.setProperty('--drift', ((index % 2 ? 1 : -1) * (30 + index * 11 % 100)) + 'px');
+    piece.style.setProperty('--delay', (index % 6 * 0.045) + 's');
+    confetti.appendChild(piece);
+  }
+  document.body.classList.add('milestone-celebrating');
+  el('milestoneCelebration').showModal();
+}
+
+function confirmMilestoneCelebration() {
+  if (!milestoneCelebration) return;
+  dismissMilestoneCelebration();
+  const candidate = nextUp(getPortfolioTotals(), coast());
+  const card = el('nextUpCard');
+  card.focus({ preventScroll: true });
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    animateElement(card, [
+      { opacity: 0.35, transform: 'translateY(12px)' },
+      { opacity: 1, transform: 'translateY(0)' }
+    ], { duration: 650, easing: 'ease-out' });
+    if (candidate) {
+      animateElement(el('nextUpBar'), [
+        { width: '0%' },
+        { width: el('nextUpBar').style.width }
+      ], { duration: 850, easing: 'ease-out' });
+    }
+  }
+}
+
+function getMilestoneProgress(milestone, portfolioTotals, coastMetrics) {
+  let current = 0;
+  let threshold = milestone.threshold;
+  let achieved = false;
+  if (milestone.type === 'capital') {
+    current = portfolioTotals.invested;
+    achieved = current >= threshold;
+  } else if (milestone.type === 'gain') {
+    current = portfolioTotals.gain;
+    achieved = current >= threshold;
+  } else if (milestone.type === 'double') {
+    threshold = 2 * portfolioTotals.invested;
+    current = portfolioTotals.currentValue;
+    achieved = portfolioTotals.invested > 0 && current >= threshold;
+  } else if (milestone.type === 'income') {
+    current = portfolioTotals.monthlyIncome;
+    achieved = current >= threshold;
+  } else if (milestone.type === 'incomeCover') {
+    current = portfolioTotals.annualIncome;
+    threshold = num(S.profile.annualSpending) * num(milestone.threshold);
+    achieved = current >= threshold;
+  } else if (milestone.type === 'coast') {
+    current = coastMetrics.currentValue;
+    threshold = coastMetrics.target;
+    achieved = current >= threshold;
+  } else if (milestone.type === 'manual') {
+    achieved = !!milestone.achieved;
+  }
+  return { current: current, threshold: threshold, achieved: achieved };
+}
+
 function getMilestoneEmoji(milestone) {
   return (milestone.motivator.match(/[\p{Emoji_Presentation}\u{1F000}-\u{1FAFF}\u2600-\u27BF]/u) || [CATEGORIES_BY_TYPE[milestone.cat] || '⭐'])[0];
 }
@@ -1381,70 +1754,66 @@ function renderMilestones() {
 
   const portfolioTotals = getPortfolioTotals();
   const coastMetrics = coast();
+  const activeGoal = nextUp(portfolioTotals, coastMetrics);
+  let achievementsChanged = false;
   let achievedCount = 0;
 
   box.innerHTML = S.milestones.map(function (milestone) {
-    let achieved = false;
-    let current = 0;
-    let threshold = milestone.threshold;
-
-    if (milestone.type === 'capital') {
-      current = portfolioTotals.invested;
-      achieved = current >= threshold;
-    } else if (milestone.type === 'gain') {
-      current = portfolioTotals.gain;
-      achieved = current >= threshold;
-    } else if (milestone.type === 'double') {
-      threshold = 2 * portfolioTotals.invested;
-      current = portfolioTotals.currentValue;
-      achieved = portfolioTotals.invested > 0 && current >= threshold;
-    } else if (milestone.type === 'income') {
-      current = portfolioTotals.monthlyIncome;
-      achieved = current >= threshold;
-    } else if (milestone.type === 'incomeCover') {
-      current = portfolioTotals.annualIncome;
-      threshold = num(S.profile.annualSpending) * num(milestone.threshold);
-      achieved = current >= threshold;
-    } else if (milestone.type === 'coast') {
-      current = coastMetrics.currentValue;
-      threshold = coastMetrics.target;
-      achieved = current >= threshold;
-    } else if (milestone.type === 'manual') {
-      achieved = !!milestone.achieved;
-    }
+    const progress = getMilestoneProgress(milestone, portfolioTotals, coastMetrics);
+    const achieved = progress.achieved;
+    const current = progress.current;
+    const threshold = progress.threshold;
+    const isActive = activeGoal && activeGoal.milestone.id === milestone.id;
     if (achieved) achievedCount += 1;
 
-    if (milestone.type !== 'manual' && achieved && S.achievedIds.indexOf(milestone.id) < 0) {
+    if (achieved && S.achievedIds.indexOf(milestone.id) < 0) {
       S.achievedIds.push(milestone.id);
-      save();
-      setTimeout(function () {
-        toast(milestone.motivator);
-      }, 50);
+      achievementsChanged = true;
     }
 
     const emoji = getMilestoneEmoji(milestone);
 
     let barHtml = '';
     if (milestone.type !== 'manual' && threshold > 0) {
-      const progress = Math.min(current / threshold, 1) * 100;
-      barHtml = '<div class="bar mini"><span style="width:' + progress + '%"></span></div>';
+      const percentage = clamp(current / threshold * 100, 0, 100);
+      barHtml = '<div class="bar mini"><span style="width:' + percentage + '%"></span></div>';
     }
 
     const checkbox = milestone.type === 'manual'
       ? '<label style="display:flex;gap:6px;align-items:center;font-size:.8rem;margin-top:6px"><input type="checkbox" ' + (achieved ? 'checked' : '') + ' onclick="toggleManual(\'' + milestone.id + '\')"> mark done</label>'
       : '';
 
-    return '<div class="qcard cat-' + milestone.cat + (achieved ? ' done' : ' locked') + '">' +
-      '<span class="lock">' + (achieved ? '' : '🔒') + '</span>' +
+    return '<div class="qcard cat-' + milestone.cat + (achieved ? ' done' : isActive ? ' in-progress' : ' locked') + '">' +
+      (isActive ? '<span class="quest-status">In progress</span>' : '') +
+      '<span class="lock">' + (achieved || isActive ? '' : '🔒') + '</span>' +
       '<span class="emoji">' + emoji + '</span>' +
       '<div class="qlabel">' + milestone.label + '</div>' +
       barHtml +
+      (isActive ? '<p class="quest-progress-copy">' + pct(clamp(current / threshold * 100, 0, 100)) + ' complete. Keep the next win in view.</p>' : '') +
       (achieved ? '<div class="motiv">' + milestone.motivator + '</div>' : '') +
       checkbox +
       (milestone.custom ? '<button class="btn ghost" style="margin-top:6px;padding:2px 8px" onclick="delMilestone(\'' + milestone.id + '\')">remove</button>' : '') +
       '</div>';
   }).join('');
+  Array.from(box.children).forEach(function (card, index) {
+    const milestone = S.milestones[index];
+    card.dataset.milestoneId = milestone.id;
+    card.tabIndex = -1;
+    if (card.classList.contains('done') && typeof milestone.achievedAt === 'string' &&
+        Number.isFinite(Date.parse(milestone.achievedAt))) {
+      const date = new Date(milestone.achievedAt);
+      const stamp = document.createElement('time');
+      stamp.className = 'quest-achieved-date';
+      stamp.dateTime = date.toISOString();
+      stamp.textContent = date.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+      stamp.title = 'Last achieved: ' + date.toLocaleString('en-PH');
+      stamp.setAttribute('aria-label', stamp.title);
+      card.appendChild(stamp);
+    }
+  });
+  if (achievementsChanged) save();
   setText('shareMilestoneSummary', achievedCount + ' of ' + S.milestones.length + ' milestones complete');
+  syncAmbientMotion();
 }
 
 function toggleManual(id) {
@@ -1452,10 +1821,10 @@ function toggleManual(id) {
     return milestone.id === id;
   });
   if (item) {
+    const previous = captureMilestoneState();
     item.achieved = !item.achieved;
-    if (item.achieved) toast(item.motivator);
     save();
-    renderMilestones();
+    renderAfterMilestoneSave(previous);
   }
 }
 
@@ -1990,7 +2359,9 @@ function saveQuickUpdates() {
     return;
   }
 
+  const previous = captureMilestoneState();
   let updatedCount = 0;
+  const updatedIndices = [];
   quickUpdateDrafts.forEach(function (draft, position) {
     if (S.positions.indexOf(position) < 0) {
       return;
@@ -1999,6 +2370,7 @@ function saveQuickUpdates() {
       setPositionField(position, field, Number(draft[field]));
     });
     updatedCount += 1;
+    updatedIndices.push(S.positions.indexOf(position));
   });
 
   quickUpdateDrafts.clear();
@@ -2007,7 +2379,10 @@ function saveQuickUpdates() {
   saveQuickTransactionHistory();
   resetQuickTradeForm();
   save();
-  renderAll();
+  renderAfterMilestoneSave(previous);
+  showSaveFeedback('quickUpdateSave', updatedIndices.map(function (index) {
+    return el('quickUpdateRows').querySelector('[data-position-index="' + index + '"]');
+  }));
   toast('Updated ' + updatedCount + ' holding' + (updatedCount === 1 ? '.' : 's.'));
 }
 
@@ -2063,11 +2438,21 @@ function renderDividend() {
   const incomeTargetAnnual = currentIncomeTargetAnnual();
   const incomeTargetPct = incomeTargetAnnual ? (plannerTotals.annualIncome / incomeTargetAnnual) * 100 : 0;
 
-  setText('divCurrent', peso(plannerTotals.annualIncome));
-  setText('divCoverage', pct(incomeTargetPct));
-  setText('divGap', peso(Math.max(targetAnnual - plannerTotals.annualIncome, 0)));
-  setText('plannerYoc', pct(plannerTotals.yieldOnCost, 2));
-  setText('divResult', '');
+  setMetricValue('divCurrent', plannerTotals.annualIncome, peso);
+  setMetricValue('divCoverage', incomeTargetPct, pct);
+  const annualGap = Math.max(targetAnnual - plannerTotals.annualIncome, 0);
+  setMetricValue('divGap', annualGap, peso);
+  setMetricValue('plannerYoc', plannerTotals.yieldOnCost, function (value) { return pct(value, 2); });
+  setText('divResult', targetMonthly > 0
+    ? annualGap === 0 ? 'Your monthly income target is covered.'
+      : pct(clamp(plannerTotals.annualIncome / targetAnnual * 100, 0, 100)) + ' of your monthly income target covered.'
+    : 'Set a positive monthly income target to see your progress.');
+  setText('divPayoffDetails', targetMonthly <= 0 ? ''
+    : annualGap === 0 ? 'Current estimated income meets this target; dividends can change.'
+    : desiredYield > 0
+      ? peso(annualGap / 12, 2) + '/month to close the gap. At ' + pct(desiredYield * 100, 1) +
+        ' net yield, about ' + peso(annualGap / desiredYield) + ' in additional capital would model that income. This is an estimate, not a buy recommendation.'
+      : 'Enter a positive desired net yield to model the additional capital needed.');
 
   const rows = orderedPositionsWithIndex(incomeBucketPayers()).map(function (item) {
     return item.position;
@@ -2537,7 +2922,7 @@ function syncProjectorPortfolioInput() {
   if (isAuto) {
     port.value = Math.round(getProjectorAutoPortfolioValue());
   }
-  setText('pjStartPortfolioValue', peso(num(port.value, 0)));
+  setMetricValue('pjStartPortfolioValue', num(port.value, 0), peso);
   const buckets = getProjectorSelectedBuckets();
   const annualContribution = num((el('pjMonthly') || {}).value, 0) * 12 * getSelectedContributionShare(buckets);
   setText('pjBucketStory', isAuto ? ('Using ' + (buckets.length ? buckets.join(' + ') : 'no selected bucket') + '. Annual contribution counted: ' + peso(annualContribution) + '.') : 'Using your manual portfolio value.');
@@ -2651,15 +3036,40 @@ function computeProjector() {
   const requiredSpendingReductionPct = inputs.spending > 0 ? (requiredSpendingReduction / inputs.spending) * 100 : 0;
   const canReachTargetCoastAge = scenario.coastAge != null && scenario.coastAge <= inputs.targetCoastAge;
   const bucketLine = inputs.selectedBuckets.length ? inputs.selectedBuckets.join(' + ') : 'manual value';
-  setText('pjResultTitle', canReachTargetCoastAge ? ('Coast FI can be reached by age ' + inputs.targetCoastAge + '.') : ('Current path misses your age ' + inputs.targetCoastAge + ' Coast FI target.'));
+  setText('pjResultTitle', scenario.coastAge == null
+    ? 'Coast FI needs another lever on this path.'
+    : scenario.coastAge <= inputs.age ? 'Your modeled Coast FI target is already within reach.'
+    : 'Your modeled Coast FI finish line: age ' + scenario.coastAge + '.');
+  const savedContribution = num(S.profile.monthlyContribution, 0);
+  let contributionImpact = canReachTargetCoastAge
+    ? 'On track for your age ' + inputs.targetCoastAge + ' goal under these assumptions.'
+    : 'Adjust the levers below to explore your age ' + inputs.targetCoastAge + ' goal.';
+  if (inputs.monthlyContribution !== savedContribution) {
+    const baseline = projectRetirementScenario(Object.assign({}, inputs, { monthlyContribution: savedContribution }));
+    if (baseline.coastAge != null && scenario.coastAge != null) {
+      const yearsEarlier = baseline.coastAge - scenario.coastAge;
+      contributionImpact = yearsEarlier > 0
+        ? 'This contribution models Coast FI ' + yearsEarlier + ' year' + (yearsEarlier === 1 ? '' : 's') + ' earlier.'
+        : yearsEarlier < 0
+          ? 'This contribution models Coast FI ' + Math.abs(yearsEarlier) + ' year' + (yearsEarlier === -1 ? '' : 's') + ' later.'
+          : 'This contribution changes the portfolio path, but not the modeled Coast FI year.';
+    } else {
+      contributionImpact = scenario.coastAge != null
+        ? 'This contribution brings Coast FI into the modeled timeline.'
+        : baseline.coastAge != null ? 'This contribution moves Coast FI beyond the modeled timeline.'
+          : 'Coast FI remains beyond the modeled timeline with either contribution.';
+    }
+    contributionImpact += ' Compared with your saved ' + peso(savedContribution) + '/month; other inputs unchanged.';
+  }
+  setText('pjContributionImpact', contributionImpact + ' Projections are not guarantees.');
   setText('pjResultCopy', 'Start at ' + peso(inputs.startPortfolio) + ', count ' + peso(inputs.annualContribution) + '/yr from selected bucket contribution share, grow at ' + pct(inputs.returnRate * 100, 2) + ', and model expenses at ' + peso(scenario.effectiveAnnualSpending) + '/yr.');
   setText('pjChartSub', 'Stacked area: Starting + deposits plus unrealized gains equals portfolio value. Coast target is the dashed line. Source: ' + bucketLine + '.');
-  setText('pjStartPortfolioValue', peso(inputs.startPortfolio));
+  setMetricValue('pjStartPortfolioValue', inputs.startPortfolio, peso);
   setText('pjRetireAgeValue', inputs.targetAge);
-  setText('pjFullFireValue', peso(scenario.fullFireNumber));
-  setText('pjAdjustedSpendingValue', peso(scenario.effectiveAnnualSpending));
-  setText('pjNoWithdrawValue', peso(scenario.portfolioAtTargetAgeNoWithdraw));
-  setText('pjWithdrawValue', peso(scenario.portfolioAtTargetAgeWithWithdraw));
+  setMetricValue('pjFullFireValue', scenario.fullFireNumber, peso);
+  setMetricValue('pjAdjustedSpendingValue', scenario.effectiveAnnualSpending, peso);
+  setMetricValue('pjNoWithdrawValue', scenario.portfolioAtTargetAgeNoWithdraw, peso);
+  setMetricValue('pjWithdrawValue', scenario.portfolioAtTargetAgeWithWithdraw, peso);
   setText('pjCoastAgeValue', scenario.coastAge != null ? ('Age ' + scenario.coastAge) : 'Not yet');
   setText('pjCoastTargetValue', scenario.coastTargetAtIntersection != null ? peso(scenario.coastTargetAtIntersection) : '—');
   setText('pjFullFireAgeValue', scenario.fullFireAge != null ? ('Age ' + scenario.fullFireAge) : ('>' + inputs.targetAge));
@@ -2759,6 +3169,7 @@ function syncReturnMode() {
 }
 
 function saveProfile() {
+  const previous = captureMilestoneState();
   const profile = S.profile;
   function numberField(id, fallback) {
     return num((el(id) || {}).value, fallback);
@@ -2801,7 +3212,8 @@ function saveProfile() {
   delete profile.includeMP2Income;
 
   save();
-  renderAll();
+  renderAfterMilestoneSave(previous);
+  showSaveFeedback('saveProfileButton');
   toast('📸 Wealth checkpoint captured.');
 }
 
@@ -2859,6 +3271,7 @@ function updatePos(index, field, value) {
     return;
   }
 
+  const previous = captureMilestoneState();
   if (quickTradeBatches.has(position) && (field === 'units' || field === 'invested')) {
     quickTradeBatches.delete(position);
     const pending = quickUpdateDrafts.get(position);
@@ -2878,7 +3291,8 @@ function updatePos(index, field, value) {
 
   setPositionField(position, field, value);
   save();
-  renderAll();
+  renderAfterMilestoneSave(previous);
+  showSaveFeedback(null, [el('posCards').querySelector('[data-position-index="' + index + '"]')]);
 }
 
 function setPositionField(position, field, value) {
@@ -2906,9 +3320,10 @@ function setPositionField(position, field, value) {
 
 function delPos(index) {
   if (confirm('Delete ' + S.positions[index].ticker + '?')) {
+    const previous = captureMilestoneState();
     S.positions.splice(index, 1);
     save();
-    renderAll();
+    renderAfterMilestoneSave(previous);
   }
 }
 
@@ -2923,6 +3338,7 @@ function addPos() {
     return;
   }
 
+  const previous = captureMilestoneState();
   S.positions.push({
     ticker: ticker,
     name: read('apName') || ticker,
@@ -2938,7 +3354,7 @@ function addPos() {
   });
 
   save();
-  renderAll();
+  renderAfterMilestoneSave(previous);
   toast('🚀 ' + ticker + ' added to your wealth-building army.');
 }
 
@@ -2962,6 +3378,7 @@ function saveSnapshot() {
   });
   save();
   renderAll();
+  showSaveFeedback('saveSnapshotButton', [el('snapTable').lastElementChild]);
   toast('📸 Wealth checkpoint recorded.');
 }
 
@@ -3011,6 +3428,7 @@ function importJSON(file) {
       if (!data || !data.profile || !Array.isArray(data.positions)) {
         throw new Error('missing profile/positions');
       }
+      dismissMilestoneCelebration();
       S = data;
       ensureDefaults();
       save();
@@ -3026,6 +3444,7 @@ function importJSON(file) {
 
 /* ===== init ===== */
 window.addEventListener('DOMContentLoaded', function () {
+  setupMotion();
   load();
   loadQuickTransactionHistory();
   loadShareMode();
@@ -3035,18 +3454,6 @@ window.addEventListener('DOMContentLoaded', function () {
   if (themeToggle) {
     themeToggle.addEventListener('click', toggleTheme);
   }
-
-  document.querySelectorAll('.navbtn').forEach(function (button) {
-    button.addEventListener('click', function () {
-      showTab(button.dataset.tab);
-    });
-  });
-
-  document.querySelectorAll('.toolbtn').forEach(function (button) {
-    button.addEventListener('click', function () {
-      showTool(button.dataset.tool);
-    });
-  });
 
   const bell = el('bellBtn');
   if (bell) {

@@ -41,6 +41,19 @@
     <button class="navbtn" data-tab="data" onclick="showTab('data')">&#9881;&#65039; Settings</button>
     <button class="navbtn" data-tab="help" onclick="showTab('help')">&#10067; Help</button>
   </nav>
+  <dialog id="milestoneCelebration" class="milestone-celebration"
+    aria-labelledby="milestoneCelebrationTitle" aria-describedby="milestoneCelebrationCopy"
+    oncancel="event.preventDefault()">
+    <div class="milestone-celebration-art" aria-hidden="true">
+      <div id="milestoneConfetti" class="milestone-confetti"></div>
+      <span class="milestone-trophy">&#127942;</span>
+    </div>
+    <p class="milestone-celebration-kicker">Take a moment. You earned this.</p>
+    <h2 id="milestoneCelebrationTitle"></h2>
+    <p id="milestoneCelebrationCopy">A goal reached. Another step toward more freedom.</p>
+    <ul id="milestoneCelebrationWins"></ul>
+    <button id="milestoneCelebrationConfirm" type="button" class="btn" onclick="confirmMilestoneCelebration()" autofocus>On to the next goal &rarr;</button>
+  </dialog>
   <div class="wrap">
 
     <!-- DASHBOARD -->
@@ -86,7 +99,7 @@
         </div>
       </div>
 
-      <div id="nextUpCard" class="next-up-banner">
+      <div id="nextUpCard" class="next-up-banner" tabindex="-1">
         <div class="next-up-top">
           <div class="next-up-goal">
             <span class="next-up-icon" id="nextUpIcon" aria-hidden="true"></span>
@@ -108,6 +121,10 @@
           <div class="bar next-up-bar" id="nextUpTrack" role="progressbar" aria-labelledby="nextUp"
             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="nextUpBar"></span></div>
           <span class="next-up-flag" aria-hidden="true">&#127937;</span>
+        </div>
+        <div class="next-up-actions journey-actions">
+          <button id="nextUpViewQuest" type="button" onclick="viewNextMilestone()">View this quest &rarr;</button>
+          <button type="button" onclick="showTab('tools');showTool('quickupdate')">Update portfolio</button>
         </div>
       </div>
 
@@ -132,9 +149,8 @@
 
       <div class="card" style="background:linear-gradient(135deg,#0e7d8b,#17a673);color:#fff">
         <h3 style="color:#fff">&#129496; Income-FI: Freedom through Dividends</h3>
-        <p id="incomeFiMessage" style="margin:0 0 10px;line-height:1.7;opacity:.95"></p>
-        <p style="opacity:.92;margin:6px 0 0">🌊 Ignore the noise. Dividends keep flowing whether markets cheer or
-          panic.</p>
+        <p id="incomeFiHeadline" class="income-fi-headline"></p>
+        <p id="incomeFiMessage" style="margin:6px 0 0;line-height:1.6;opacity:.92"></p>
       </div>
 
       <div class="card">
@@ -149,6 +165,12 @@
         <p id="valueShareNote" class="note" style="display:none">Each line is indexed to its first nonzero snapshot (100%).</p>
         <p id="valueEmpty" style="display:none;color:var(--muted)">📸 Start tracking your journey. Save your first
           snapshot and watch your wealth grow over time.</p>
+        <div id="snapshotMomentum" class="snapshot-momentum">
+          <p id="snapshotMomentumCopy" class="note"></p>
+          <div class="journey-actions">
+            <button type="button" onclick="viewSnapshots()">Record a checkpoint &rarr;</button>
+          </div>
+        </div>
       </div>
 
       <div class="card growth-movers-card">
@@ -227,7 +249,10 @@
             <p>Portfolio yield on cost: <b id="plannerYoc"></b></p>
           </div>
         </div>
-        <p id="divResult" style="margin-top:10px"></p>
+        <div class="planning-payoff">
+          <strong id="divResult"></strong>
+          <p id="divPayoffDetails" class="note"></p>
+        </div>
         <div class="table-scroll">
           <table>
             <thead>
@@ -331,6 +356,7 @@
           <div class="projector-hero">
             <div class="projector-kicker">🧭 Coast FI story</div>
             <div id="pjResultTitle" class="projector-title">Start with your profile defaults and adjust the levers.</div>
+            <p id="pjContributionImpact" class="planning-impact"></p>
             <p id="pjResultCopy" class="projector-copy">The same engine powers the graph and all output metrics.</p>
             <div class="projector-chart-panel">
               <div class="cardhead compact-top" style="margin-bottom:8px">
@@ -477,7 +503,7 @@
             <div class="field"><label>FX rate (USD→PHP)</label><input id="pfFx"></div>
           </div>
         </details>
-        <button class="btn" onclick="saveProfile()">Save Profile</button>
+        <button id="saveProfileButton" class="btn" onclick="saveProfile()">Save Profile</button>
       </div>
 
       <div class="card">
@@ -511,10 +537,10 @@
         <button class="btn" onclick="addPos()">Add Holding</button>
       </div>
 
-      <div class="card">
+      <div class="card" id="snapshotsCard" tabindex="-1">
         <h3>Snapshots (Portfolio Value Over Time)</h3>
         <div class="btnrow">
-          <button class="btn" onclick="saveSnapshot()">Save snapshot today</button>
+          <button id="saveSnapshotButton" class="btn" onclick="saveSnapshot()">Save snapshot today</button>
           <button class="btn alt" onclick="delLastSnapshot()">Delete last</button>
           <button class="btn danger" onclick="clearSnapshots()">Clear all snapshots</button>
         </div>
@@ -689,6 +715,11 @@
             you have achieved Coast FIRE under the selected assumptions.
             </p>
 
+            <p>
+            The contribution comparison uses your saved monthly contribution as a baseline,
+            keeping all other current planner inputs unchanged. Projections are scenarios, not guarantees.
+            </p>
+
             <hr>
 
             <h3>⚙️ Contribution Profiles</h3>
@@ -727,6 +758,11 @@
             <h3>💵 Income-FI Philosophy</h3>
 
             <p>
+            Income-FI encouragement varies on page refresh, stays consistent while you navigate,
+            and always uses your latest income figures.
+            </p>
+
+            <p>
             Income is not just cash flow.
             Income is freedom purchased in advance.
             </p>
@@ -749,6 +785,38 @@
             <hr>
 
             <h3>🏆 The Real Scoreboard</h3>
+
+            <p>
+            Next Milestone highlights the closest unfinished numeric quest. View this quest jumps to its
+            full-color In progress card. Completing a quest after saving changes or marking a manual quest
+            opens Home with a trophy and brief confetti celebration. One popup recognizes all goals reached
+            in that save. Confirm to reveal the next milestone; there is no timeout or outside-click dismissal.
+            Holdings edits save when a field change is committed. Loading the app, importing data, and editing
+            unsaved Quick Update drafts do not trigger a celebration. Automatic quests celebrate again when
+            a save takes them from below their target back to completion; staying above the target does not replay
+            the celebration. Manual quests celebrate only once.
+            Share Mode skips the celebration and redirect. Animations respect reduced-motion preferences.
+            </p>
+            <p>
+            Each newly earned achievement stores its latest date and time in the quest's optional
+            <code>achievedAt</code> field in JSON exports. A subtle date beside the completed quest's checkmark
+            shows when it was last achieved; hover for the time. Re-achieving an automatic quest updates this date.
+            Older files without dates still import normally. Existing completions with unknown dates stay undated,
+            and importing or refreshing never assigns a new achievement date.
+            </p>
+            <p>
+            Cards ease into view on navigation. Visible figures and charts transition when their values change,
+            while successful saves briefly highlight affected entries and show a Saved confirmation.
+            Hero lighting and the active quest use subtle ambient motion, not live-market indicators.
+            Continuous effects pause offscreen or while the browser tab is hidden. Reduced-motion preferences
+            disable these effects and show updated values immediately; Share Mode masks private figures without
+            animating them.
+            </p>
+            <p>
+            Checkpoint momentum compares the last two saved snapshots, separating changes in invested
+            capital from changes in unrealized gain/loss. Invested-capital changes are not a contribution
+            streak, and unrealized changes are not a return calculation. These details stay hidden in Share Mode.
+            </p>
 
             <p>
             Ignore short-term market noise.
