@@ -208,19 +208,21 @@
           </div>
         </div>
         <p id="divResult" style="margin-top:10px"></p>
-        <table>
-          <thead>
-            <tr>
-              <th>Holding</th>
-              <th>Current Price</th>
-              <th>Current Net Monthly</th>
-              <th>Net Yield</th>
-              <th>Target Price</th>
-              <th>Additional Capital</th>
-            </tr>
-          </thead>
-          <tbody id="divTable"></tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Holding</th>
+                <th>Current Price</th>
+                <th>Current Net Monthly</th>
+                <th>Net Yield</th>
+                <th>Target Price</th>
+                <th>Additional Capital</th>
+              </tr>
+            </thead>
+            <tbody id="divTable"></tbody>
+          </table>
+        </div>
         <div class="note" style="padding-top:10px">Data are only from Income Bucket. Each row estimates the additional
           capital needed for that specific holding to reach the planner target on its own.</div>
       </div>
@@ -233,18 +235,20 @@
         </div>
         <div class="field"><label>New money to add (₱)</label><input id="rbAdd" value="0" oninput="computeRebalance()">
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Holding</th>
-              <th>Now</th>
-              <th>Within %</th>
-              <th>Target</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="rbTable"></tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Holding</th>
+                <th>Now</th>
+                <th>Within %</th>
+                <th>Target</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="rbTable"></tbody>
+          </table>
+        </div>
         <p class="note">Default distribution loads only bucket targets. Within-bucket weights are based on current
           composition.</p>
       </div>
@@ -376,7 +380,7 @@
         </section>
         <details id="quickTransactionHistory" class="quick-transaction-history" style="display:none">
           <summary>Recent transactions</summary>
-          <div class="quick-update-table-wrap">
+          <div class="table-scroll">
             <table class="quick-transaction-table">
               <thead><tr><th>Date</th><th>Action</th><th>Holding</th><th>Units</th><th>Total paid/received (PHP)</th><th>Realized P/L</th><th></th><th>Status</th></tr></thead>
               <tbody id="quickTransactionRows"></tbody>
@@ -387,7 +391,7 @@
           <input id="quickUpdateSearch" type="search" placeholder="Search ticker or holding" aria-label="Search holdings">
           <p id="quickUpdateStatus" class="note" aria-live="polite">No pending changes.</p>
         </div>
-        <div class="quick-update-table-wrap">
+        <div class="table-scroll">
           <table class="quick-update-table">
             <thead>
               <tr>
@@ -494,17 +498,19 @@
           <button class="btn alt" onclick="delLastSnapshot()">Delete last</button>
           <button class="btn danger" onclick="clearSnapshots()">Clear all snapshots</button>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Invested</th>
-              <th>Market Value</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="snapTable"></tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Invested</th>
+                <th>Market Value</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="snapTable"></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card">
